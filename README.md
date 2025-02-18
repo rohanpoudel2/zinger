@@ -15,17 +15,34 @@ This project is developed as part of CSCI 6651 course at University of New Haven
 - Basic in-memory storage system
 - Error handling and logging
 
-## Setup
+## Setup & Running the Application
+
+### Option 1: Using run.sh (Recommended)
+
+1. Make the run script executable:
+   ```bash
+   chmod +x run.sh
+   ```
+
+2. Run the application:
+   ```bash
+   ./run.sh
+   ```
+
+The run script will automatically:
+- Create a virtual environment if it doesn't exist
+- Install required dependencies
+- Start the application
+
+### Option 2: Manual Setup
 
 1. Create a virtual environment:
-
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: .\venv\Scripts\activate
    ```
 
 2. Install dependencies:
-
    ```bash
    pip install -r requirements.txt
    ```
