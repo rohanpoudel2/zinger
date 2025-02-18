@@ -1,1 +1,2 @@
 python-dotenv>=1.0.1
+# No external dependencies required for basic CLI functionality
