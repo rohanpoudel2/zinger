@@ -5,7 +5,6 @@ A command-line interface (CLI) application for bus ticket booking and tracking s
 ## Project Overview
 
 This project is developed as part of CSCI 6651 course at University of New Haven. The system allows passengers to book tickets, check bus availability, and track real-time bus locations.
-
 ## Features (Sprint 1)
 
 - Command-line interface (CLI) for basic operations
