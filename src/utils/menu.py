@@ -1,10 +1,12 @@
 from typing import Callable, Dict, Optional
 from utils.logger import setup_logger
+from utils.storage import InMemoryStorage
 
 class Menu:
     def __init__(self):
         self.logger = setup_logger()
-        self.current_user_role = "passenger"  # Default role, can be updated when you add authentication
+        self.current_user_role = "passenger"
+        self.storage = InMemoryStorage()
     
     def display_header(self, title: str) -> None:
         """Display a formatted header for menus."""
@@ -43,14 +45,22 @@ class Menu:
         
         # Show available buses first
         print("\nAvailable Buses:")
-        # This will be populated with actual bus data
-        print("1. Bus 101: New Haven -> New York | 10:00 AM | 25 seats | $30")
-        print("2. Bus 102: New Haven -> Boston  | 11:00 AM | 15 seats | $35")
+        buses = self.storage.get_all_buses()
+        for bus in buses.values():
+            available_seats = len(bus.get_available_seats())
+            print(f"Bus {bus.bus_number}: {bus.route} | "
+                  f"{bus.departure} | {available_seats} seats | ${bus.fare}")
         
         bus_number = self.get_input("\nEnter Bus Number")
         if not bus_number:
             return None
             
+        # Show available seats for selected bus
+        bus = self.storage.get_bus(bus_number)
+        if bus:
+            available_seats = bus.get_available_seats()
+            print("\nAvailable Seats:", ", ".join(available_seats))
+        
         passenger_name = self.get_input("Enter Passenger Name")
         phone = self.get_input("Enter Phone Number")
         seat = self.get_input("Enter Seat Number (e.g., 1A)").upper()
