@@ -1,4 +1,4 @@
-# Bus Tracking System
+# Team Zinger
 
 A command-line interface (CLI) application for bus ticket booking and tracking system.
 
@@ -8,8 +8,7 @@ This project is developed as part of CSCI 6651 course at University of New Haven
 ## Features (Sprint 1)
 
 - Command-line interface (CLI) for basic operations
-- User authentication and management
-- Bus information management
+- Bus information
 - Ticket booking and cancellation
 - Basic in-memory storage system
 - Error handling and logging
