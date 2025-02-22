@@ -19,8 +19,13 @@ class Ticket:
         """Cancel the ticket."""
         if self.status == TicketStatus.CANCELLED:
             raise ValueError("Ticket is already cancelled")
-        
-        self.bus.cancel_seat(self.seat)
+
+        # Check if the seat is booked before attempting to cancel it
+        if self.status == TicketStatus.CONFIRMED and self.seat in self.bus.booked_seats:
+            self.bus.cancel_seat(self.seat)
+        else:
+            raise ValueError("Seat not booked")
+
         self.status = TicketStatus.CANCELLED
 
     def get_details(self) -> str:
