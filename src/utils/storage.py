@@ -79,3 +79,6 @@ class InMemoryStorage:
             return True
         except ValueError as e:
             raise ValueError(f"Cancellation failed: {str(e)}") 
+
+    def add_bus(self, bus):
+        self.buses[bus.bus_number] = bus
