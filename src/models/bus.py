@@ -1,6 +1,7 @@
 from typing import List, Set
 from dataclasses import dataclass, field
 
+
 @dataclass
 class Bus:
     bus_number: str
@@ -18,10 +19,10 @@ class Bus:
         """Book a specific seat if available."""
         if not self.is_valid_seat(seat):
             raise ValueError("Invalid seat number")
-        
+
         if not self.is_seat_available(seat):
             raise ValueError("Seat already booked")
-        
+
         self.booked_seats.add(seat)
         return True
 
@@ -29,13 +30,14 @@ class Bus:
         """Cancel a booked seat."""
         if seat not in self.booked_seats:
             raise ValueError("Seat not booked")
-        
+
         self.booked_seats.remove(seat)
         return True
 
     def get_available_seats(self) -> List[str]:
         """Get list of available seats."""
-        all_seats = [f"{row}{seat}" for row in range(1, 6) for seat in ['A', 'B', 'C', 'D', 'E', 'F']]
+        all_seats = [f"{row}{seat}" for row in range(
+            1, 6) for seat in ['A', 'B', 'C', 'D', 'E', 'F']]
         return [seat for seat in all_seats if seat not in self.booked_seats]
 
     def is_valid_seat(self, seat: str) -> bool:
@@ -47,4 +49,12 @@ class Bus:
             column = seat[1].upper()
             return 1 <= row <= 5 and column in ['A', 'B', 'C', 'D', 'E', 'F']
         except ValueError:
-            return False 
+            return False
+
+    @staticmethod
+    def view_available_buses(buses):
+        print("\n--- Available Buses ---")
+        for bus in buses.values():
+            available_seats = len(bus.get_available_seats())
+            print(f"Bus {bus.bus_number}: {bus.route} | "
+                  f"{bus.departure} | {available_seats} seats | ${bus.fare}")

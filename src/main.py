@@ -3,6 +3,8 @@ from utils.logger import setup_logger
 from utils.storage import InMemoryStorage
 from utils.menu import Menu
 from utils.tracking import BusTracker
+from models.bus import Bus
+
 
 class BusTrackingSystem:
     def __init__(self):
@@ -10,56 +12,52 @@ class BusTrackingSystem:
         self.storage = InMemoryStorage()
         self.menu = Menu()
         self.tracker = BusTracker()
-    
+
     def view_available_buses(self):
         buses = self.storage.get_all_buses()
-        
-        print("\n--- Available Buses ---")
-        for bus in buses.values():
-            available_seats = len(bus.get_available_seats())
-            print(f"Bus {bus.bus_number}: {bus.route} | "
-                  f"{bus.departure} | {available_seats} seats | ${bus.fare}")
-        
+        Bus.view_available_buses(buses)
         self.menu.pause()
-    
+
     def view_my_bookings(self):
         """Handle viewing user's bookings."""
         bookings = self.storage.get_all_bookings()
-        
+
         if not bookings:
             print("\nNo bookings found.")
         else:
             for ticket in bookings:
                 print(ticket.get_details())
-        
+
         self.menu.pause()
-    
+
     def book_ticket(self):
         """Handle ticket booking."""
         booking_data = self.menu.display_booking_menu()
         if not booking_data:
             return
-        
+
         try:
             booking_id = self.storage.create_booking(**booking_data)
-            self.menu.display_success(f"Booking confirmed! Your booking ID is: {booking_id}")
+            self.menu.display_success(
+                f"Booking confirmed! Your booking ID is: {booking_id}")
         except ValueError as e:
             self.menu.display_error(str(e))
-    
+
     def cancel_booking(self):
         """Handle booking cancellation."""
         booking_id = self.menu.display_cancellation_menu()
-        
+
         try:
             self.storage.cancel_booking(booking_id)
-            self.menu.display_success(f"Booking #{booking_id} has been cancelled")
+            self.menu.display_success(
+                f"Booking #{booking_id} has been cancelled")
         except ValueError as e:
             self.menu.display_error(str(e))
-    
+
     def track_bus(self):
         """Handle bus tracking."""
         booking_id = self.menu.display_tracking_menu()
-        
+
         booking = self.storage.get_booking(booking_id)
         if not booking:
             self.menu.display_error("Invalid booking ID!")
@@ -76,12 +74,12 @@ class BusTrackingSystem:
                 pass
             finally:
                 self.menu.pause()
-    
+
     def run(self):
         """Main application loop."""
         while True:
             choice = self.menu.display_main_menu()
-            
+
             try:
                 if choice == '1':
                     self.logger.info("Selected: View Available Buses")
@@ -104,10 +102,11 @@ class BusTrackingSystem:
                     break
                 else:
                     self.menu.display_error("Invalid option")
-                    
+
             except Exception as e:
                 self.logger.error(f"An error occurred: {str(e)}")
                 self.menu.display_error(str(e))
+
 
 if __name__ == '__main__':
     app = BusTrackingSystem()
