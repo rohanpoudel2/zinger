@@ -79,7 +79,7 @@ class BusTracker:
                 print("\nUpdating in real-time...")
                 print("\nPress Ctrl+C to stop tracking")
                 
-                time.sleep(10)  
+                time.sleep(5)  
                 
         except KeyboardInterrupt:
             print("\nStopped tracking.")
