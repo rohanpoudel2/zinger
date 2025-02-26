@@ -7,15 +7,21 @@ def setup_logger():
     if not logger.hasHandlers():  # Prevent duplicate handlers
         logger.setLevel(logging.INFO)
 
-        # Logs will be saved to 'bus_reservation.log' instead of appearing in CLI
-        handler = logging.FileHandler("bus_reservation.log")
-        handler.setLevel(logging.INFO)
+        # File handler for all logs
+        file_handler = logging.FileHandler("bus_reservation.log")
+        file_handler.setLevel(logging.INFO)
+
+        # Error file handler for error logs
+        error_handler = logging.FileHandler("bus_reservation_error.log")
+        error_handler.setLevel(logging.ERROR)
 
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
+        file_handler.setFormatter(formatter)
+        error_handler.setFormatter(formatter)
 
-        logger.addHandler(handler)
+        logger.addHandler(file_handler)
+        logger.addHandler(error_handler)
 
-    logger.propagate = False  # Prevent duplicate logging
+    logger.propagate = False
     return logger

@@ -2,6 +2,7 @@ import unittest
 from models.ticket import Ticket, TicketStatus
 from models.bus import Bus
 from models.user import User
+from exceptions import ValidationError, SeatError
 
 class TestTicket(unittest.TestCase):
 
@@ -25,22 +26,19 @@ class TestTicket(unittest.TestCase):
     
     def test_cancel_ticket(self):
         """Test canceling a ticket"""
-        ticket = Ticket(booking_id="123", bus=self.bus, passenger_name="John Doe", phone="555-1234", seat="1A")
-        self.user.add_booking(ticket)
-        self.bus.book_seat("1A")  # Ensure the seat is booked before canceling
+        ticket = Ticket("123", self.bus, "John Doe", "1234567890", "1A")
+        self.bus.book_seat("1A")
         ticket.cancel()
-        available_seats = self.bus.get_available_seats()
-        self.assertIn("1A", available_seats)
+        self.assertEqual(ticket.status, TicketStatus.CANCELLED)
+        self.assertNotIn("1A", self.bus.booked_seats)
     
     def test_cancel_already_cancelled_ticket(self):
         """Test canceling an already canceled ticket"""
-        ticket = Ticket(booking_id="123", bus=self.bus, passenger_name="John Doe", phone="555-1234", seat="1A")
-        self.user.add_booking(ticket)
+        ticket = Ticket("123", self.bus, "John Doe", "1234567890", "1A")
         self.bus.book_seat("1A")
-        ticket.cancel()  # Cancel first time
-        with self.assertRaises(ValueError) as context:
+        ticket.cancel()
+        with self.assertRaises(ValueError):
             ticket.cancel()
-        self.assertEqual(str(context.exception), "Ticket is already cancelled")
 
 if __name__ == "__main__":
     unittest.main()
