@@ -1,6 +1,7 @@
 import unittest
 from utils.storage import InMemoryStorage
 from models.bus import Bus
+from exceptions import StorageError, BookingError, ValidationError
 
 class TestStorage(unittest.TestCase):
 
@@ -30,9 +31,34 @@ class TestStorage(unittest.TestCase):
     
     def test_create_booking(self):
         """Test booking a ticket through storage"""
-        booking_id = self.storage.create_booking("101", "John Doe", "1234567890", "1A")
+        booking_id = self.storage.create_booking(
+            bus_number="101",
+            passenger_name="John Doe",
+            phone="1234567890",
+            seat="1A"
+        )
         self.assertTrue(booking_id)
         self.assertIn(booking_id, self.storage.bookings)
+    
+    def test_create_booking_invalid_bus(self):
+        """Test booking with invalid bus number"""
+        with self.assertRaises(StorageError):
+            self.storage.create_booking(
+                bus_number="999",
+                passenger_name="John Doe",
+                phone="1234567890",
+                seat="1A"
+            )
+    
+    def test_create_booking_missing_fields(self):
+        """Test booking with missing required fields"""
+        with self.assertRaises(ValidationError):
+            self.storage.create_booking(
+                bus_number="101",
+                passenger_name="",
+                phone="1234567890",
+                seat="1A"
+            )
 
     def test_cancel_booking_in_storage(self):
         """Test canceling a booking in storage"""

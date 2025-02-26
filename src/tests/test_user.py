@@ -1,7 +1,8 @@
 import unittest
 from models.user import User, UserRole
-from models.ticket import Ticket
+from models.ticket import Ticket, TicketStatus
 from models.bus import Bus
+from exceptions import ValidationError
 
 class TestUser(unittest.TestCase):
 
@@ -28,14 +29,13 @@ class TestUser(unittest.TestCase):
         self.user.add_booking(ticket)
         self.assertIn(ticket, self.user.bookings)
 
-    def test_cancel_user_booking(self):
+    def test_cancel_booking(self):
         """Test canceling a user booking"""
-        ticket = Ticket(booking_id="123", bus=self.bus, passenger_name="John Doe", phone="555-1234", seat="1A")
+        ticket = Ticket("123", self.bus, "John Doe", "1234567890", "1A")
         self.user.add_booking(ticket)
         self.bus.book_seat("1A")
         self.user.cancel_booking("123")
-        available_seats = self.bus.get_available_seats()
-        self.assertIn("1A", available_seats)
+        self.assertEqual(ticket.status, TicketStatus.CANCELLED)
     
     def test_cancel_nonexistent_booking(self):
         """Test canceling a booking that doesn't exist"""

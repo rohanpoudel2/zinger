@@ -2,6 +2,7 @@ import unittest
 from models.bus import Bus
 from models.ticket import Ticket
 from models.user import User
+from exceptions import ValidationError, SeatError
 
 class TestBus(unittest.TestCase):
     
@@ -30,10 +31,15 @@ class TestBus(unittest.TestCase):
         self.assertTrue(self.bus.book_seat("1A"))
         self.assertIn("1A", self.bus.booked_seats)
     
+    def test_book_invalid_seat(self):
+        """Test booking with invalid seat number"""
+        with self.assertRaises(ValidationError):
+            self.bus.book_seat("7Z")
+    
     def test_book_already_taken_seat(self):
         """Test booking an already booked seat"""
         self.bus.book_seat("1A")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SeatError):
             self.bus.book_seat("1A")
     
     def test_cancel_seat(self):
@@ -44,8 +50,13 @@ class TestBus(unittest.TestCase):
     
     def test_cancel_unbooked_seat(self):
         """Test canceling a seat that hasn't been booked"""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SeatError):
             self.bus.cancel_seat("2B")
+    
+    def test_invalid_seat_format(self):
+        """Test validation of seat format"""
+        with self.assertRaises(ValidationError):
+            self.bus.book_seat(123)  # Non-string input
 
     def test_get_available_seats(self):
         """Test getting available seats"""
