@@ -2,6 +2,7 @@ from typing import Dict, Optional, List
 from models.bus import Bus
 from models.ticket import Ticket, TicketStatus
 from models.user import User, UserRole
+from exceptions import StorageError, BookingError, ValidationError, SeatError
 
 
 class InMemoryStorage:
@@ -80,25 +81,33 @@ class InMemoryStorage:
         return [seat for seat in all_seats if seat not in bus.booked_seats]
 
     def create_booking(self, bus_number: str, passenger_name: str, phone: str, seat: str) -> str:
+        """Create a new booking."""
+        if not all([bus_number, passenger_name, phone, seat]):
+            raise ValidationError("All booking fields are required")
+
         bus = self.get_bus(bus_number)
         if not bus:
-            raise ValueError("Invalid bus number")
+            raise StorageError(f"Bus {bus_number} not found")
 
         try:
             bus.book_seat(seat)
-        except ValueError as e:
-            raise ValueError(f"Booking failed: {str(e)}")
+        except (SeatError, ValidationError) as e:
+            raise BookingError(f"Booking failed: {str(e)}")
 
         booking_id = str(self.booking_id_counter)
         self.booking_id_counter += 1
 
-        ticket = Ticket(
-            booking_id=booking_id,
-            bus=bus,
-            passenger_name=passenger_name,
-            phone=phone,
-            seat=seat
-        )
+        try:
+            ticket = Ticket(
+                booking_id=booking_id,
+                bus=bus,
+                passenger_name=passenger_name,
+                phone=phone,
+                seat=seat
+            )
+        except Exception as e:
+            bus.cancel_seat(seat)  # Rollback the seat booking
+            raise BookingError(f"Failed to create ticket: {str(e)}")
 
         self.bookings[booking_id] = ticket
         self.current_user.add_booking(ticket)
