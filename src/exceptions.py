@@ -14,6 +14,18 @@ class ValidationError(BusReservationError):
     """Raised when there's a validation error"""
     pass
 
+class AuthenticationError(BusReservationError):
+    """Raised when there's an authentication error"""
+    pass
+
+class AuthorizationError(BusReservationError):
+    """Raised when there's an authorization error"""
+    pass
+
+class DatabaseError(BusReservationError):
+    """Raised when there's a database operation error"""
+    pass
+
 class StorageError(BusReservationError):
     """Raised when there's an error related to storage operations"""
     pass
