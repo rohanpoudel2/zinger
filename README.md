@@ -50,6 +50,21 @@ The run script will automatically:
    python -m src.main
    ```
 
+4. Docker Build the Image:
+   ```bash
+   docker build -t zinger .
+   ```
+
+5. Docker run all the migration:
+   ```bash
+   docker run -it zinger migrate --all
+   ```
+
+6. Docker Run the application:
+   ```bash
+   docker run -it zinger start
+   ```
+
 ## Team Members
 
 - Aryan Tandon
