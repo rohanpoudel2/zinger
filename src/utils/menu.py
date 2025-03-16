@@ -1,16 +1,12 @@
-from typing import Callable, Dict, Optional
+from typing import Dict, Optional
 from utils.logger import setup_logger
-from utils.storage import InMemoryStorage
 import os 
-import re  # Add this import
-from exceptions import BusReservationError, BookingError, ValidationError, StorageError
+import re
+from exceptions import BusReservationError, ValidationError
 
 class Menu:
     def __init__(self):
         self.logger = setup_logger()
-        self.current_user_role = "passenger"
-        self.storage = InMemoryStorage()
-        # Add phone regex pattern
         self.phone_pattern = re.compile(r'^\+?1?\d{9,15}$')
     
     def clear_screen(self) -> None:
@@ -37,23 +33,16 @@ class Menu:
         input("\nPress Enter to continue...")
     
     def display_main_menu(self) -> str:
-        """Display main menu and get user choice."""
-        self.clear_screen()  # Clear before showing main menu
-        self.display_header("Welcome to Bus Tracking System")
-        
-        options = {
-            "1": "View Available Buses",
-            "2": "My Bookings",
-            "3": "Book a Ticket",
-            "4": "Cancel My Booking",
-            "5": "Track My Bus",
-            "6": "Exit"
-        }
-        
-        for key, value in options.items():
-            print(f"{key}. {value}")
-            
-        return self.get_input("\nSelect an option (1-6)")
+        """Display the main menu and get user choice."""
+        print("\n=== Bus Tracking System ===")
+        print("1. View Available Buses")
+        print("2. View My Bookings")
+        print("3. Book a Ticket")
+        print("4. Cancel Booking")
+        print("5. Track Bus")
+        print("6. Export Bookings to CSV")
+        print("7. Exit")
+        return input("\nEnter your choice (1-7): ")
     
     def validate_phone(self, phone: str) -> bool:
         """Validate phone number format."""
@@ -65,31 +54,10 @@ class Menu:
             self.clear_screen()
             self.display_header("Book a Ticket")
             
-            # Show available buses first
-            print("\nAvailable Buses:")
-            buses = self.storage.get_all_buses()
-            if not buses:
-                raise StorageError("No buses available")
-
-            for bus in buses.values():
-                available_seats = len(bus.get_available_seats())
-                print(f"Bus {bus.bus_number}: {bus.route} | "
-                      f"{bus.departure} | {available_seats} seats | ${bus.fare}")
-            
             bus_number = self.get_input("\nEnter Bus Number")
             if not bus_number:
                 return None
                 
-            bus = self.storage.get_bus(bus_number)
-            if not bus:
-                raise ValidationError(f"Invalid bus number: {bus_number}")
-
-            available_seats = bus.get_available_seats()
-            if not available_seats:
-                raise BookingError("No seats available on this bus")
-
-            print("\nAvailable Seats:", ", ".join(available_seats))
-            
             passenger_name = self.get_input("Enter Passenger Name")
             if not passenger_name.strip():
                 raise ValidationError("Passenger name is required")

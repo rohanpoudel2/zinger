@@ -1,2 +1,7 @@
 python-dotenv>=1.0.1
-# No external dependencies required for basic CLI functionality
+sqlalchemy>=2.0.0
+Werkzeug>=3.0.0
+rich>=13.7.0
+requests>=2.32.3
+geopy>=2.4.1
+geocoder>=1.38.1
