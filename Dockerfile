@@ -13,7 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY src/ ./src/
 COPY run_migrations.sh .
-COPY bus_system.db .
 COPY docker-entrypoint.sh .
 
 # Make entrypoint script executable
