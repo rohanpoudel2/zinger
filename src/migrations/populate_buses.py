@@ -1,6 +1,7 @@
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
+import requests
 
 # Add the parent directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -8,89 +9,122 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.database_manager import DatabaseManager
 from repositories.bus_repository import BusRepository
 from models.database_models import BusModel
+from sqlalchemy import text
+
+def fetch_vehicle_positions():
+    """Fetch real-time vehicle positions from CTTransit API."""
+    url = "https://cttprdtmgtfs.ctttrpcloud.com/TMGTFSRealTimeWebService/Vehicle/VehiclePositions.json"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"Error fetching vehicle positions: {str(e)}")
+        return None
+
+def get_route_info(session, route_id):
+    """Get route information from the routes table."""
+    if not route_id:
+        return None
+        
+    result = session.execute(
+        text("SELECT route_short_name, route_long_name FROM routes WHERE route_id = :route_id"),
+        {"route_id": route_id}
+    ).fetchone()
+    
+    if result:
+        return {
+            "short_name": result[0] or "",
+            "long_name": result[1] or ""
+        }
+    return None
 
 def populate_buses():
-    """Populate the database with sample bus data."""
-    print("Populating database with sample bus data...")
+    """Populate the database with real CTTransit bus data."""
+    print("Populating database with real CTTransit bus data...")
     
     # Initialize database manager
     db_manager = DatabaseManager()
+    
+    # Fetch real-time vehicle positions
+    vehicle_data = fetch_vehicle_positions()
+    if not vehicle_data or 'entity' not in vehicle_data:
+        print("No vehicle data available. Aborting.")
+        return
     
     # Create a session
     with db_manager.get_session() as session:
         # Initialize bus repository
         bus_repository = BusRepository(session)
         
-        # Sample bus routes
-        routes = [
-            {
-                "route": "Downtown Shuttle",
-                "stops": ["Union Station", "Green", "Yale", "Church & Chapel"],
-                "type": "shuttle",
-                "fare": 1.75
-            },
-            {
-                "route": "Yale Shuttle",
-                "stops": ["Yale Station", "Science Hill", "Medical Center", "Central Campus"],
-                "type": "shuttle",
-                "fare": 0.0  # Free for Yale affiliates
-            },
-            {
-                "route": "Whitney Avenue",
-                "stops": ["Downtown", "East Rock", "Hamden", "Cheshire"],
-                "type": "local",
-                "fare": 2.00
-            },
-            {
-                "route": "Dixwell Avenue",
-                "stops": ["Union Station", "Dixwell", "Hamden Plaza", "Southern CT State"],
-                "type": "local",
-                "fare": 2.00
-            }
-        ]
+        # Get all route IDs from the database for comparison
+        available_routes = session.execute(
+            text("SELECT route_id FROM routes")
+        ).fetchall()
+        available_route_ids = {r[0] for r in available_routes}
+        print(f"\nAvailable route IDs in database: {available_route_ids}\n")
         
-        # Current time for departures
-        current_time = datetime.now()
-        
-        # Create buses for each route
         buses_created = 0
-        for route in routes:
-            num_buses = 3  # Create multiple buses per route
-            for i in range(num_buses):
-                bus_number = f"NH{route['route'][:3]}{i+1}"
+        for entity in vehicle_data['entity']:
+            if 'vehicle' not in entity or entity.get('isDeleted', False):
+                continue
                 
-                # Check if bus already exists
-                existing_bus = bus_repository.get(bus_number)
-                if existing_bus:
-                    print(f"Bus '{bus_number}' already exists. Skipping.")
-                    continue
+            vehicle = entity['vehicle']
+            vehicle_id = vehicle.get('vehicle', {}).get('label', '')
+            if not vehicle_id:
+                continue
                 
-                # Create departure time (15 min intervals)
-                departure_time = current_time + timedelta(minutes=15 * i)
-                
-                # Create bus
-                bus = BusModel(
-                    bus_number=bus_number,
-                    route=route['route'],
-                    departure=departure_time,
-                    fare=route['fare'],
-                    is_active=True,
-                    capacity=30,
-                    current_location=route['stops'][i % len(route['stops'])],
-                    route_type=route['type'],
-                    agency_id="CTTRANSIT",
-                    last_updated=datetime.now()
-                )
-                
-                # Add bus to database
-                try:
+            # Extract vehicle information
+            position = vehicle.get('position', {})
+            trip = vehicle.get('trip', {})
+            route_id = trip.get('route_id', '')
+            print(f"Bus {vehicle_id} has route_id: {route_id}")
+            
+            # Get route information
+            route_info = get_route_info(session, route_id)
+            route_name = f"{route_info['short_name']} - {route_info['long_name']}" if route_info else "Unknown Route"
+            
+            # Create or update bus
+            try:
+                bus = bus_repository.get(vehicle_id)
+                if not bus:
+                    bus = BusModel(
+                        bus_number=vehicle_id,
+                        route=route_name,
+                        route_id=route_id,
+                        trip_id=trip.get('trip_id', ''),
+                        latitude=position.get('latitude', 0.0),
+                        longitude=position.get('longitude', 0.0),
+                        speed=position.get('speed', 0.0),
+                        bearing=position.get('bearing', 0.0),
+                        is_active=True,
+                        capacity=50,  # Default capacity
+                        current_location='En Route',
+                        route_type='local',
+                        agency_id='CTTRANSIT',
+                        last_updated=datetime.fromtimestamp(vehicle.get('timestamp', 0)),
+                        next_stop=vehicle.get('stop_id', '')
+                    )
                     bus_repository.add(bus)
                     buses_created += 1
-                    print(f"Added bus: {bus_number} - {route['route']}")
-                except Exception as e:
-                    print(f"Error adding bus {bus_number}: {str(e)}")
+                    print(f"Added bus: {vehicle_id} - {route_name}")
+                else:
+                    # Update existing bus
+                    bus.route = route_name
+                    bus.route_id = route_id
+                    bus.trip_id = trip.get('trip_id', '')
+                    bus.latitude = position.get('latitude', 0.0)
+                    bus.longitude = position.get('longitude', 0.0)
+                    bus.speed = position.get('speed', 0.0)
+                    bus.bearing = position.get('bearing', 0.0)
+                    bus.last_updated = datetime.fromtimestamp(vehicle.get('timestamp', 0))
+                    bus.next_stop = vehicle.get('stop_id', '')
+                    print(f"Updated bus: {vehicle_id} - {route_name}")
+                    
+            except Exception as e:
+                print(f"Error processing bus {vehicle_id}: {str(e)}")
         
         print(f"Successfully added {buses_created} buses to the database.")
 
 if __name__ == "__main__":
-    populate_buses() 
+    populate_buses()

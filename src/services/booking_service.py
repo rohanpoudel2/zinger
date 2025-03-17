@@ -16,33 +16,8 @@ class BookingService:
 
     def get_route_info(self, route: str) -> Dict:
         """Get detailed information about a specific route."""
-        route_info = {
-            "Downtown Shuttle": {
-                "frequency": "Every 10 minutes",
-                "operating_hours": "6:00 AM - 10:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            },
-            "Yale Shuttle": {
-                "frequency": "Every 15 minutes",
-                "operating_hours": "7:00 AM - 6:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            },
-            "Whitney Avenue": {
-                "frequency": "Every 20 minutes",
-                "operating_hours": "5:30 AM - 11:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            },
-            "Dixwell Avenue": {
-                "frequency": "Every 20 minutes",
-                "operating_hours": "5:30 AM - 11:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            }
-        }
-        return route_info.get(route, {})
+        # Return empty dict - we'll use real-time data from the API instead of static data
+        return {}
 
     def create_booking(self, bus_number: str, passenger_name: str, phone: str, seat: str, user_id: int) -> str:
         """Create a new booking."""

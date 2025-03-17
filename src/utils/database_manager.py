@@ -11,7 +11,7 @@ import os
 console = Console()
 
 class DatabaseManager:
-    def __init__(self, db_path: str = "bus_system.db"):
+    def __init__(self, db_path: str = "bus_booking.db"):
         try:
             # Ensure the database directory exists
             db_dir = os.path.dirname(os.path.abspath(db_path))

@@ -14,7 +14,6 @@ import signal
 import threading
 import time
 
-# Install rich traceback handler
 install(show_locals=False)
 console = Console()
 
@@ -23,62 +22,48 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def handle_interrupt(signum, frame):
-    """Handle interrupt signal gracefully."""
+    """Handle interrupt signal (Ctrl+C)."""
     clear_screen()
     console.print("\n[yellow]Shutting down...[/yellow]")
-    exit(0)
+    os._exit(0)
 
-def update_bus_data(transit_service: TransitService):
-    """Periodically update bus data."""
+def update_bus_data(db_manager: DatabaseManager):
+    """Update bus data periodically in a separate thread with its own session."""
     while True:
-        try:
-            transit_service.update_bus_database()
-            time.sleep(60)  # Update every minute
-        except Exception as e:
-            console.print(f"[red]Error updating bus data:[/red] {str(e)}")
-            time.sleep(5)
+        with db_manager.get_session() as thread_session:
+            try:
+                transit_service = TransitService(thread_session)
+                transit_service.update_bus_database()
+                time.sleep(30)
+            except Exception as e:
+                console.print(f"\n[red]Error updating bus data:[/red] {str(e)}")
 
 def main():
-    # Set up interrupt handler
     signal.signal(signal.SIGINT, handle_interrupt)
     
-    # Clear screen on startup
     clear_screen()
     
-    # Initialize database manager
     db_manager = DatabaseManager()
     
-    # Initialize services
-    transit_service = TransitService(db_manager)
-    location_service = LocationService()
-    
-    # Start bus data update thread
     update_thread = threading.Thread(
         target=update_bus_data,
-        args=(transit_service,),
+        args=(db_manager,),
         daemon=True
     )
     update_thread.start()
     
-    # Get database session
     with db_manager.get_session() as session:
-        # Initialize repositories with session
         user_repository = UserRepository(session)
         booking_repository = BookingRepository(session)
         bus_repository = BusRepository(session)
         
-        # Initialize services
         booking_service = BookingService(booking_repository, bus_repository)
         auth_service = AuthService(user_repository)
+        location_service = LocationService()
         
-        # Initialize menu
         menu = Menu(booking_service, auth_service, location_service)
         
         try:
-            # Initial bus data update
-            transit_service.update_bus_database()
-            
-            # Start the application
             menu.display_main_menu()
         except KeyboardInterrupt:
             clear_screen()

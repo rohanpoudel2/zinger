@@ -141,61 +141,94 @@ class Menu:
 
     def view_available_buses(self) -> None:
         """Display available buses."""
-        buses = self.booking_service.get_available_buses()
-        if not buses:
-            console.print("\n[yellow]No buses available.[/yellow]")
-            self._pause()
-            return
+        try:
+            buses = self.booking_service.get_available_buses()
+            if not buses:
+                console.print("\n[yellow]No buses available.[/yellow]")
+                self._pause()
+                return
 
-        table = Table(
-            title="Available Buses in New Haven",
-            title_style="bold magenta",
-            border_style="blue"
-        )
-        table.add_column("Bus Number", style="cyan", justify="center")
-        table.add_column("Route", style="magenta")
-        table.add_column("Current Location", style="green")
-        table.add_column("Next Departure", style="blue")
-        table.add_column("Type", style="yellow")
-        table.add_column("Fare", style="green")
-        table.add_column("Available Seats", style="cyan", justify="center")
-
-        for bus in buses:
-            available_seats = len(self.booking_service.get_available_seats(bus.bus_number))
-            departure_time = bus.departure.strftime("%I:%M %p")
-            
-            # Format fare display
-            fare_display = "Free" if bus.fare == 0 else f"${bus.fare:.2f}"
-            
-            # Format route type with emoji
-            type_emoji = "🚐" if bus.route_type == "shuttle" else "🚌"
-            route_type = f"{type_emoji} {bus.route_type.title()}"
-            
-            table.add_row(
-                str(bus.bus_number),
-                bus.route,
-                bus.current_location or "N/A",
-                departure_time,
-                route_type,
-                fare_display,
-                f"{available_seats}/30"
+            table = Table(
+                title="Available Buses in New Haven",
+                title_style="bold magenta",
+                border_style="blue"
             )
+            table.add_column("Bus Number", style="cyan", justify="center")
+            table.add_column("Route", style="magenta")
+            table.add_column("Current Location", style="green")
+            table.add_column("Next Departure", style="blue")
+            table.add_column("Type", style="yellow")
+            table.add_column("Fare", style="green")
+            table.add_column("Available Seats", style="cyan", justify="center")
 
-        console.print("\n[bold blue]Real-time Bus Information[/bold blue]")
-        console.print(table)
-        
-        # Show route information
-        if len(buses) > 0:
-            console.print("\n[bold cyan]Route Information:[/bold cyan]")
-            for bus in buses[:1]:  # Show info for the first bus of each route
-                route_info = self.booking_service.get_route_info(bus.route)
-                if route_info:
-                    info_table = Table(show_header=False, box=None)
-                    info_table.add_row("Frequency:", f"[green]{route_info.get('frequency', 'N/A')}[/green]")
-                    info_table.add_row("Operating Hours:", f"[green]{route_info.get('operating_hours', 'N/A')}[/green]")
-                    info_table.add_row("Wheelchair Accessible:", "✅" if route_info.get('wheelchair_accessible') else "❌")
-                    info_table.add_row("Bike Racks Available:", "✅" if route_info.get('bike_racks') else "❌")
-                    console.print(info_table)
+            for bus in buses:
+                available_seats = len(self.booking_service.get_available_seats(bus.bus_number))
+                
+                departure_time = "Real-time"
+                if hasattr(bus, 'get_departure_str'):
+                    departure_time = bus.get_departure_str()
+                elif bus and hasattr(bus, 'departure') and bus.departure is not None:
+                    try:
+                        departure_time = bus.departure.strftime("%I:%M %p")
+                    except:
+                        departure_time = "Real-time"
+                
+                fare_display = "Free" if not hasattr(bus, 'fare') or bus.fare is None or bus.fare == 0 else f"${bus.fare:.2f}"
+                
+                type_emoji = "🚐" if hasattr(bus, 'route_type') and bus.route_type == "shuttle" else "🚌"
+                route_type = f"{type_emoji} {bus.route_type.title() if hasattr(bus, 'route_type') and bus.route_type else 'Local'}"
+                
+                table.add_row(
+                    str(bus.bus_number),
+                    bus.route if hasattr(bus, 'route') else "Unknown",
+                    bus.current_location if hasattr(bus, 'current_location') and bus.current_location else "N/A",
+                    departure_time,
+                    route_type,
+                    fare_display,
+                    f"{available_seats}/30"
+                )
+
+            console.print("\n[bold blue]Real-time Bus Information[/bold blue]")
+            console.print(table)
+            
+            if len(buses) > 0 and hasattr(buses[0], 'route_id') and buses[0].route_id:
+                console.print("\n[bold cyan]Route Information:[/bold cyan]")
+                console.print("[italic]Real-time data from CTTransit API[/italic]")
+                
+                location_table = Table(show_header=True, box=None)
+                location_table.add_column("Bus", style="cyan")
+                location_table.add_column("Location", style="green")
+                location_table.add_column("Speed", style="blue")
+                location_table.add_column("Next Stop", style="magenta")
+                
+                for bus in buses[:5]:
+                    if (hasattr(bus, 'latitude') and bus.latitude is not None and 
+                        hasattr(bus, 'longitude') and bus.longitude is not None):
+                        location = f"({bus.latitude:.4f}, {bus.longitude:.4f})"
+                    else:
+                        location = "N/A"
+                        
+                    speed = "N/A"
+                    if hasattr(bus, 'speed') and bus.speed is not None:
+                        try:
+                            speed = f"{bus.speed:.1f} m/s"
+                        except:
+                            speed = "N/A"
+                            
+                    next_stop = bus.next_stop if hasattr(bus, 'next_stop') and bus.next_stop else "N/A"
+                    
+                    location_table.add_row(
+                        str(bus.bus_number),
+                        location,
+                        speed,
+                        next_stop
+                    )
+                
+                console.print(location_table)
+        except Exception as e:
+            console.print(f"\n[red]An error occurred while displaying buses:[/red] {str(e)}")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
         
         self._pause()
 
@@ -207,29 +240,24 @@ class Menu:
         """Handle ticket booking."""
         self.auth_service.require_auth()
         
-        # First check if there are any available buses
         buses = self.booking_service.get_available_buses()
         if not buses:
             console.print("\n[yellow]No buses available for booking.[/yellow]")
             self._pause()
             return
 
-        # Show available buses
         self.view_available_buses()
         
-        # Get booking details
         bus_number = console.input("\nEnter bus number to book: ")
         passenger_name = console.input("Enter passenger name: ")
         phone = console.input("Enter phone number: ")
         
-        # Show available seats for selected bus
         available_seats = self.booking_service.get_available_seats(bus_number)
         if not available_seats:
             console.print("[red]No seats available on this bus.[/red]")
             self._pause()
             return
             
-        # Display available seats in a formatted way
         console.print("\n[cyan]Available Seats:[/cyan]")
         seat_groups = [available_seats[i:i+6] for i in range(0, len(available_seats), 6)]
         for row in seat_groups:
@@ -253,71 +281,101 @@ class Menu:
 
     def _view_user_bookings(self) -> None:
         """View bookings for the current user."""
-        self.auth_service.require_auth()
-        bookings = self.booking_service.get_user_bookings(
-            self.auth_service.get_current_user().id
-        )
-        
-        if not bookings:
-            console.print("\n[yellow]No bookings found.[/yellow]")
-            self._pause()
-            return
-
-        table = Table(title="Your Bookings")
-        table.add_column("Booking ID", style="cyan")
-        table.add_column("Bus Route", style="magenta")
-        table.add_column("Seat", style="green")
-        table.add_column("Departure Time", style="blue")
-        table.add_column("Status", style="yellow")
-
-        for booking in bookings:
-            # Get bus details
-            bus = self.booking_service.bus_repository.get(booking.bus_number)
-            
-            table.add_row(
-                str(booking.booking_id),
-                bus.route if bus else "Unknown",
-                booking.seat,
-                bus.departure.strftime("%I:%M %p") if bus else "Unknown",
-                booking.status.value
+        try:
+            self.auth_service.require_auth()
+            bookings = self.booking_service.get_user_bookings(
+                self.auth_service.get_current_user().id
             )
+            
+            if not bookings:
+                console.print("\n[yellow]No bookings found.[/yellow]")
+                self._pause()
+                return
 
-        console.print(table)
+            table = Table(title="Your Bookings")
+            table.add_column("Booking ID", style="cyan")
+            table.add_column("Bus Route", style="magenta")
+            table.add_column("Seat", style="green")
+            table.add_column("Departure Time", style="blue")
+            table.add_column("Status", style="yellow")
+
+            for booking in bookings:
+                # Get bus details
+                bus = self.booking_service.bus_repository.get(booking.bus_number)
+                
+                # Use the helper method for departure time
+                departure_time = "Real-time"
+                if bus and hasattr(bus, 'get_departure_str'):
+                    departure_time = bus.get_departure_str()
+                elif bus and hasattr(bus, 'departure') and bus.departure is not None:
+                    try:
+                        departure_time = bus.departure.strftime("%I:%M %p")
+                    except:
+                        departure_time = "Real-time"
+                
+                table.add_row(
+                    str(booking.booking_id),
+                    bus.route if bus and hasattr(bus, 'route') else "Unknown",
+                    booking.seat,
+                    departure_time,
+                    booking.status.value if hasattr(booking, 'status') else "Unknown"
+                )
+
+            console.print(table)
+        except Exception as e:
+            console.print(f"\n[red]An error occurred while viewing bookings:[/red] {str(e)}")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
         self._pause()
 
     def _view_all_bookings(self) -> None:
         """View all bookings (admin only)."""
-        self.auth_service.require_role(UserRole.ADMIN)
-        bookings = self.booking_service.get_all_bookings()
-        
-        if not bookings:
-            console.print("\n[yellow]No bookings found.[/yellow]")
-            self._pause()
-            return
-
-        table = Table(title="All Bookings")
-        table.add_column("Booking ID", style="cyan")
-        table.add_column("User", style="magenta")
-        table.add_column("Bus Route", style="green")
-        table.add_column("Seat", style="blue")
-        table.add_column("Departure Time", style="yellow")
-        table.add_column("Status", style="red")
-
-        for booking in bookings:
-            # Get user and bus details
-            user = self.auth_service.get_user_by_id(booking.user_id)
-            bus = self.booking_service.bus_repository.get(booking.bus_number)
+        try:
+            self.auth_service.require_role(UserRole.ADMIN)
+            bookings = self.booking_service.get_all_bookings()
             
-            table.add_row(
-                str(booking.booking_id),
-                user.username if user else "Unknown",
-                bus.route if bus else "Unknown",
-                booking.seat,
-                bus.departure.strftime("%I:%M %p") if bus else "Unknown",
-                booking.status.value
-            )
+            if not bookings:
+                console.print("\n[yellow]No bookings found.[/yellow]")
+                self._pause()
+                return
 
-        console.print(table)
+            table = Table(title="All Bookings")
+            table.add_column("Booking ID", style="cyan")
+            table.add_column("User", style="magenta")
+            table.add_column("Bus Route", style="green")
+            table.add_column("Seat", style="blue")
+            table.add_column("Departure Time", style="yellow")
+            table.add_column("Status", style="red")
+
+            for booking in bookings:
+                # Get user and bus details
+                user = self.auth_service.get_user_by_id(booking.user_id)
+                bus = self.booking_service.bus_repository.get(booking.bus_number)
+                
+                # Use the helper method for departure time
+                departure_time = "Real-time"
+                if bus and hasattr(bus, 'get_departure_str'):
+                    departure_time = bus.get_departure_str()
+                elif bus and hasattr(bus, 'departure') and bus.departure is not None:
+                    try:
+                        departure_time = bus.departure.strftime("%I:%M %p")
+                    except:
+                        departure_time = "Real-time"
+                
+                table.add_row(
+                    str(booking.booking_id),
+                    user.username if user and hasattr(user, 'username') else "Unknown",
+                    bus.route if bus and hasattr(bus, 'route') else "Unknown",
+                    booking.seat,
+                    departure_time,
+                    booking.status.value if hasattr(booking, 'status') else "Unknown"
+                )
+
+            console.print(table)
+        except Exception as e:
+            console.print(f"\n[red]An error occurred while viewing all bookings:[/red] {str(e)}")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
         self._pause()
 
     def _manage_users(self) -> None:

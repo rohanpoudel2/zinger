@@ -14,8 +14,40 @@ class UserRole(enum.Enum):
     PASSENGER = "passenger"
     ADMIN = "admin"
 
+class RouteType(enum.Enum):
+    TRAM = 0
+    SUBWAY = 1
+    RAIL = 2
+    BUS = 3
+    FERRY = 4
+    CABLE_TRAM = 5
+    AERIAL_LIFT = 6
+    FUNICULAR = 7
+    TROLLEYBUS = 11
+    MONORAIL = 12
+
 class Base(DeclarativeBase):
     pass
+
+class RouteModel(Base):
+    __tablename__ = "routes"
+    
+    route_id = Column(String(50), primary_key=True)
+    agency_id = Column(String(50), nullable=False)
+    route_short_name = Column(String(50))
+    route_long_name = Column(String(255))
+    route_desc = Column(String(255))
+    route_type = Column(SQLEnum(RouteType))
+    route_url = Column(String(255))
+    route_color = Column(String(6))
+    route_text_color = Column(String(6))
+    last_updated = Column(DateTime, default=func.now())
+    
+    # Relationships
+    buses = relationship("BusModel", back_populates="route_info")
+
+    def __repr__(self):
+        return f"<Route {self.route_short_name} - {self.route_long_name}>"
 
 class UserModel(Base):
     __tablename__ = "users"
@@ -34,23 +66,51 @@ class UserModel(Base):
 class BusModel(Base):
     __tablename__ = "buses"
     
-    bus_number = Column(String(50), primary_key=True)
-    route = Column(String(100), nullable=False)
-    departure = Column(DateTime, nullable=False)
-    fare = Column(Float, nullable=False)
+    bus_number = Column(String(50), primary_key=True)  # CTTransit vehicle ID
+    route = Column(String(100), nullable=False)  # Route name
+    route_id = Column(String(50), ForeignKey("routes.route_id"), index=True)  # CTTransit route ID
+    departure = Column(DateTime, nullable=True)  # Made nullable for real-time tracking
+    fare = Column(Float, nullable=True)  # Made nullable for real-time tracking
     is_active = Column(Boolean, default=True)
     capacity = Column(Integer, default=30)
     current_location = Column(String(100))
     route_type = Column(String(50))  # local, express, shuttle
     agency_id = Column(String(50), default="CTTRANSIT")
-    last_updated = Column(DateTime, default=func.now())
+    last_updated = Column(DateTime, nullable=True, default=datetime.utcnow)
+    
+    # Additional CTTransit fields
+    latitude = Column(Float)
+    longitude = Column(Float)
+    speed = Column(Float)  # meters per second
+    bearing = Column(Float)  # degrees from true north
+    trip_id = Column(String(50))  # CTTransit trip ID
+    next_stop = Column(String(100))
     
     # Relationships
     bookings = relationship("BookingModel", back_populates="bus", cascade="all, delete-orphan")
     booked_seats = relationship("BookedSeatModel", back_populates="bus", cascade="all, delete-orphan")
+    route_info = relationship("RouteModel", back_populates="buses")
 
     def __repr__(self):
         return f"<Bus {self.bus_number} - {self.route}>"
+        
+    def get_departure_str(self):
+        """Get formatted departure time or 'Real-time' if None."""
+        if self.departure is None:
+            return "Real-time"
+        try:
+            return self.departure.strftime("%I:%M %p")
+        except:
+            return "Real-time"
+            
+    def get_last_updated_str(self):
+        """Get formatted last_updated time or None if not available."""
+        if self.last_updated is None:
+            return None
+        try:
+            return self.last_updated.strftime("%Y-%m-%dT%H:%M:%S")
+        except:
+            return None
 
 class BookingModel(Base):
     __tablename__ = "bookings"

@@ -1,171 +1,271 @@
 import requests
-from datetime import datetime, timedelta
-from typing import List, Dict
+from datetime import datetime
+from typing import List, Dict, Optional
 from models.database_models import BusModel
 from repositories.bus_repository import BusRepository
 from utils.database_manager import DatabaseManager
 import json
 import time
-import random  # For simulating coordinates
+import os
+import zipfile
+import io
+from sqlalchemy.orm import Session
 
 class TransitService:
-    def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
-        self.base_url = "https://www.cttransit.com/api/v1"
-        self.new_haven_routes = [
-            "New Haven Downtown", "Union Station", "Yale Shuttle",
-            "Whitney Avenue", "Dixwell Avenue", "Congress Avenue"
-        ]
+    def __init__(self, db_session: Session):
+        self.db_session = db_session
+        self.gtfs_url = "https://www.cttransit.com/sites/default/files/gtfs/googlect_transit.zip"
+        self.vehicle_positions_url = "https://cttprdtmgtfs.ctttrpcloud.com/TMGTFSRealTimeWebService/Vehicle/VehiclePositions.json"
+        self.trip_updates_url = "https://cttprdtmgtfs.ctttrpcloud.com/TMGTFSRealTimeWebService/TripUpdate/TripUpdates.json"
+        self.alerts_url = "https://cttprdtmgtfs.ctttrpcloud.com/TMGTFSRealTimeWebService/Alert/Alerts.json"
         
-        # New Haven coordinates (center of the city)
-        self.new_haven_center = (41.3083, -72.9279)
+        # Cache for GTFS data
+        self._route_cache = {}
+        self._stop_cache = {}
+        self._load_gtfs_data()
 
-    def fetch_new_haven_buses(self) -> List[Dict]:
-        """Simulate fetching real-time New Haven bus data."""
-        current_time = datetime.now()
-        simulated_buses = []
-        
-        # Simulate bus routes in New Haven
-        routes = [
-            {
-                "route": "Downtown Shuttle",
-                "stops": ["Union Station", "Green", "Yale", "Church & Chapel"],
-                "type": "shuttle",
-                "fare": 1.75,
-                "center_lat": 41.3083,  # Downtown New Haven
-                "center_lng": -72.9279,
-                "radius": 0.01  # Small radius for downtown
-            },
-            {
-                "route": "Yale Shuttle",
-                "stops": ["Yale Station", "Science Hill", "Medical Center", "Central Campus"],
-                "type": "shuttle",
-                "fare": 0.0,  # Free for Yale affiliates
-                "center_lat": 41.3163,  # Yale University
-                "center_lng": -72.9223,
-                "radius": 0.008
-            },
-            {
-                "route": "Whitney Avenue",
-                "stops": ["Downtown", "East Rock", "Hamden", "Cheshire"],
-                "type": "local",
-                "fare": 2.00,
-                "center_lat": 41.3300,  # Whitney Ave
-                "center_lng": -72.9150,
-                "radius": 0.03  # Larger radius for longer route
-            },
-            {
-                "route": "Dixwell Avenue",
-                "stops": ["Union Station", "Dixwell", "Hamden Plaza", "Southern CT State"],
-                "type": "local",
-                "fare": 2.00,
-                "center_lat": 41.3200,  # Dixwell Ave
-                "center_lng": -72.9350,
-                "radius": 0.025
-            }
-        ]
+    def _load_gtfs_data(self) -> None:
+        """Load GTFS data from CTTransit and cache routes and stops."""
+        if not self._route_cache or not self._stop_cache:
+            try:
+                response = requests.get(self.gtfs_url)
+                response.raise_for_status()
+                
+                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                    # Load routes
+                    with z.open('routes.txt') as f:
+                        lines = f.read().decode('utf-8').split('\n')[1:]  # Skip header
+                        for line in lines:
+                            if line.strip():
+                                fields = line.strip().split(',')
+                                self._route_cache[fields[0]] = {
+                                    'route_short_name': fields[1],
+                                    'route_long_name': fields[2],
+                                    'route_desc': fields[3] if len(fields) > 3 else ''
+                                }
+                    
+                    # Load stops
+                    with z.open('stops.txt') as f:
+                        lines = f.read().decode('utf-8').split('\n')[1:]  # Skip header
+                        for line in lines:
+                            if line.strip():
+                                fields = line.strip().split(',')
+                                self._stop_cache[fields[0]] = {
+                                    'stop_name': fields[1],
+                                    'stop_desc': fields[2] if len(fields) > 2 else '',
+                                    'stop_lat': float(fields[3]),
+                                    'stop_lon': float(fields[4])
+                                }
+            except Exception as e:
+                print(f"Error loading GTFS data: {e}")
 
-        # Generate simulated bus data
-        for route in routes:
-            num_buses = 3  # Simulate multiple buses per route
-            for i in range(num_buses):
-                # Generate random coordinates within the route's area
-                lat_offset = (random.random() - 0.5) * 2 * route['radius']
-                lng_offset = (random.random() - 0.5) * 2 * route['radius']
+    def fetch_real_time_buses(self) -> List[Dict]:
+        """Fetch real-time bus data from CTTransit."""
+        try:
+            response = requests.get(self.vehicle_positions_url)
+            response.raise_for_status()
+            data = response.json()
+            
+            buses = []
+            for entity in data.get('entity', []):
+                if entity.get('is_deleted'):
+                    continue
+                    
+                vehicle = entity.get('vehicle')
+                if not vehicle:
+                    continue
                 
-                latitude = route['center_lat'] + lat_offset
-                longitude = route['center_lng'] + lng_offset
+                vehicle_data = vehicle.get('vehicle', {})
+                position = vehicle.get('position', {})
+                trip = vehicle.get('trip', {})
                 
-                departure_time = current_time + timedelta(minutes=15 * i)
                 bus = {
-                    "bus_number": f"NH{route['route'][:3]}{i+1}",
-                    "route": route['route'],
-                    "departure": departure_time,
-                    "fare": route['fare'],
-                    "is_active": True,
-                    "current_location": route['stops'][i % len(route['stops'])],
-                    "route_type": route['type'],
-                    "latitude": latitude,
-                    "longitude": longitude
+                    'bus_number': vehicle_data.get('label', ''),
+                    'route_id': trip.get('route_id', ''),
+                    'trip_id': trip.get('trip_id', ''),
+                    'latitude': position.get('latitude', 0.0),
+                    'longitude': position.get('longitude', 0.0),
+                    'speed': position.get('speed', 0.0),
+                    'bearing': position.get('bearing', 0.0),
+                    'timestamp': vehicle.get('timestamp', 0),
+                    'next_stop': vehicle.get('stop_id', '')
                 }
-                simulated_buses.append(bus)
-
-        return simulated_buses
+                buses.append(bus)
+            
+            return buses
+        except Exception as e:
+            print(f"Error fetching real-time bus data: {e}")
+            return []
 
     def update_bus_database(self) -> None:
-        """Update the database with latest bus information."""
-        buses = self.fetch_new_haven_buses()
-        
-        # Use a fresh session for each update
-        with self.db_manager.get_session() as session:
-            bus_repository = BusRepository(session)
-            
-            # Process each bus individually to avoid batch operations
+        """Update the database with the latest bus information."""
+        try:
+            buses = self.fetch_real_time_buses()
             for bus_data in buses:
                 try:
-                    # Create bus model
-                    bus = BusModel(
-                        bus_number=bus_data['bus_number'],
-                        route=bus_data['route'],
-                        departure=bus_data['departure'],
-                        fare=bus_data['fare'],
-                        is_active=bus_data['is_active'],
-                        current_location=bus_data['current_location'],
-                        route_type=bus_data['route_type'],
-                        latitude=bus_data['latitude'],
-                        longitude=bus_data['longitude'],
-                        last_updated=datetime.now()
-                    )
+                    bus = self.db_session.query(BusModel).filter_by(
+                        bus_number=bus_data['bus_number']
+                    ).first()
                     
-                    # Check if bus exists and update it
-                    existing_bus = bus_repository.get(bus_data['bus_number'])
-                    if existing_bus:
+                    # Safely create timestamp
+                    timestamp = None
+                    try:
+                        if bus_data['timestamp']:
+                            timestamp = datetime.fromtimestamp(bus_data['timestamp'])
+                        else:
+                            timestamp = datetime.utcnow()
+                    except Exception as e:
+                        print(f"Error creating timestamp: {e}, value: {bus_data['timestamp']}")
+                        timestamp = datetime.utcnow()
+                    
+                    if bus:
                         # Update existing bus
-                        existing_bus.route = bus.route
-                        existing_bus.departure = bus.departure
-                        existing_bus.fare = bus.fare
-                        existing_bus.is_active = bus.is_active
-                        existing_bus.current_location = bus.current_location
-                        existing_bus.route_type = bus.route_type
-                        existing_bus.latitude = bus.latitude
-                        existing_bus.longitude = bus.longitude
-                        existing_bus.last_updated = bus.last_updated
-                        session.commit()
+                        bus.route_id = bus_data['route_id']
+                        bus.latitude = bus_data['latitude']
+                        bus.longitude = bus_data['longitude']
+                        bus.speed = bus_data['speed']
+                        bus.bearing = bus_data['bearing']
+                        bus.trip_id = bus_data['trip_id']
+                        bus.next_stop = bus_data['next_stop']
+                        bus.last_updated = timestamp
                     else:
-                        # Add new bus
-                        session.add(bus)
-                        session.commit()
+                        # Create new bus
+                        bus = BusModel(
+                            bus_number=bus_data['bus_number'],
+                            route_id=bus_data['route_id'],
+                            route="Unknown Route",  # Add default route name
+                            latitude=bus_data['latitude'],
+                            longitude=bus_data['longitude'],
+                            speed=bus_data['speed'],
+                            bearing=bus_data['bearing'],
+                            trip_id=bus_data['trip_id'],
+                            next_stop=bus_data['next_stop'],
+                            last_updated=timestamp,
+                            is_active=True,
+                            current_location='En Route',
+                            route_type='local',
+                            agency_id='CTTRANSIT'
+                        )
+                        self.db_session.add(bus)
                 except Exception as e:
-                    session.rollback()
-                    print(f"Error updating bus {bus_data['bus_number']}: {str(e)}")
+                    print(f"Error processing bus {bus_data.get('bus_number', 'unknown')}: {e}")
+                
+            self.db_session.commit()
+        except Exception as e:
+            print(f"Error updating bus database: {e}")
+            self.db_session.rollback()
 
-    def get_route_info(self, route_name: str) -> Dict:
-        """Get detailed information about a specific route."""
-        # In a real implementation, this would fetch from the CT Transit API
+    def get_route_info(self, route_id: str) -> Dict:
+        """Get detailed information about a specific route, including real-time updates and alerts."""
+        if not self._route_cache:
+            self._load_gtfs_data()
+            
         route_info = {
-            "Downtown Shuttle": {
-                "frequency": "Every 10 minutes",
-                "operating_hours": "6:00 AM - 10:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            },
-            "Yale Shuttle": {
-                "frequency": "Every 15 minutes",
-                "operating_hours": "7:00 AM - 6:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            },
-            "Whitney Avenue": {
-                "frequency": "Every 20 minutes",
-                "operating_hours": "5:30 AM - 11:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            },
-            "Dixwell Avenue": {
-                "frequency": "Every 20 minutes",
-                "operating_hours": "5:30 AM - 11:00 PM",
-                "wheelchair_accessible": True,
-                "bike_racks": True
-            }
+            'route_id': route_id,
+            'route_details': self._route_cache.get(route_id, {}),
+            'active_buses': [],
+            'trip_updates': [],
+            'alerts': []
         }
-        return route_info.get(route_name, {}) 
+        
+        # Get active buses on this route
+        try:
+            active_buses = self.db_session.query(BusModel).filter_by(route_id=route_id).all()
+            route_info['active_buses'] = []
+            
+            for bus in active_buses:
+                # Use the helper method for last_updated
+                last_updated_str = None
+                if hasattr(bus, 'get_last_updated_str'):
+                    last_updated_str = bus.get_last_updated_str()
+                elif hasattr(bus, 'last_updated') and bus.last_updated is not None:
+                    try:
+                        last_updated_str = bus.last_updated.strftime("%Y-%m-%dT%H:%M:%S")
+                    except Exception as e:
+                        print(f"Error formatting last_updated: {e}, value: {bus.last_updated}, type: {type(bus.last_updated)}")
+                
+                bus_info = {
+                    'bus_number': bus.bus_number,
+                    'latitude': bus.latitude if hasattr(bus, 'latitude') else None,
+                    'longitude': bus.longitude if hasattr(bus, 'longitude') else None,
+                    'speed': bus.speed if hasattr(bus, 'speed') else None,
+                    'bearing': bus.bearing if hasattr(bus, 'bearing') else None,
+                    'next_stop': bus.next_stop if hasattr(bus, 'next_stop') else None,
+                    'last_updated': last_updated_str
+                }
+                route_info['active_buses'].append(bus_info)
+        except Exception as e:
+            print(f"Error getting active buses: {e}")
+            import traceback
+            print(traceback.format_exc())
+        
+        # Get trip updates
+        try:
+            response = requests.get(self.trip_updates_url)
+            response.raise_for_status()
+            data = response.json()
+            
+            for entity in data.get('entity', []):
+                if entity.get('is_deleted'):
+                    continue
+                    
+                trip_update = entity.get('trip_update', {})
+                trip = trip_update.get('trip', {})
+                
+                if trip.get('route_id') == route_id:
+                    stop_updates = []
+                    for stop_time in trip_update.get('stop_time_update', []):
+                        stop_id = stop_time.get('stop_id', '')
+                        stop_info = self._stop_cache.get(stop_id, {})
+                        
+                        arrival = stop_time.get('arrival', {})
+                        departure = stop_time.get('departure', {})
+                        
+                        stop_updates.append({
+                            'stop_id': stop_id,
+                            'stop_name': stop_info.get('stop_name', ''),
+                            'arrival_time': arrival.get('time'),
+                            'departure_time': departure.get('time'),
+                            'schedule_relationship': stop_time.get('schedule_relationship', 0)
+                        })
+                    
+                    route_info['trip_updates'].append({
+                        'trip_id': trip.get('trip_id', ''),
+                        'start_time': trip.get('start_time', ''),
+                        'start_date': trip.get('start_date', ''),
+                        'schedule_relationship': trip.get('schedule_relationship', 0),
+                        'vehicle': trip_update.get('vehicle', {}),
+                        'stop_updates': stop_updates
+                    })
+        except Exception as e:
+            print(f"Error fetching trip updates: {e}")
+        
+        # Get alerts
+        try:
+            response = requests.get(self.alerts_url)
+            response.raise_for_status()
+            data = response.json()
+            
+            for entity in data.get('entity', []):
+                if entity.get('is_deleted'):
+                    continue
+                    
+                alert = entity.get('alert', {})
+                informed_entities = alert.get('informed_entity', [])
+                
+                # Check if alert applies to this route
+                for entity in informed_entities:
+                    if entity.get('route_id') == route_id:
+                        route_info['alerts'].append({
+                            'id': entity.get('id', ''),
+                            'effect': alert.get('effect', ''),
+                            'header': alert.get('header_text', {}).get('translation', [{}])[0].get('text', ''),
+                            'description': alert.get('description_text', {}).get('translation', [{}])[0].get('text', ''),
+                            'active_period': alert.get('active_period', []),
+                            'severity_level': alert.get('severity_level', '')
+                        })
+                        break
+        except Exception as e:
+            print(f"Error fetching alerts: {e}")
+        
+        return route_info 
