@@ -4,6 +4,13 @@
 # Set the migrations directory path
 MIGRATIONS_DIR="src/migrations"
 
+# Set PYTHONPATH to include src directory
+export PYTHONPATH=src:$PYTHONPATH
+
+# Activate virtual environment
+echo "Activating virtual environment..."
+source venv/bin/activate
+
 # Display help message
 show_help() {
     echo "Bus Booking System - Database Migration Script"
@@ -13,28 +20,23 @@ show_help() {
     echo "Options:"
     echo "  --help                 Show this help message"
     echo "  --all                  Run all migrations (default)"
-    echo "  --admin-only           Run only admin user migration"
-    echo "  --buses-only           Run only bus data migration"
+    echo "  --reset-only           Only reset the database schema"
+    echo "  --buses-only           Only populate bus data"
+    echo "  --admin-only           Only create default admin user"
     echo "  --admin USERNAME EMAIL PASSWORD  Create custom admin user"
     echo ""
     echo "Examples:"
     echo "  ./run_migrations.sh --all"
-    echo "  ./run_migrations.sh --admin-only"
+    echo "  ./run_migrations.sh --reset-only"
     echo "  ./run_migrations.sh --buses-only"
     echo "  ./run_migrations.sh --admin johndoe john@example.com password123"
     echo ""
 }
 
 # Check if Python is installed
-if ! command -v python3 &> /dev/null; then
-    # Try with just 'python' if python3 is not found
-    if ! command -v python &> /dev/null; then
-        echo "Error: Python is not installed or not in PATH"
-        exit 1
-    fi
-    PYTHON_CMD="python"
-else
-    PYTHON_CMD="python3"
+if ! command -v python &> /dev/null; then
+    echo "Error: Python is not installed or not in PATH"
+    exit 1
 fi
 
 # Check if migrations directory exists
@@ -43,10 +45,20 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
     exit 1
 fi
 
+run_all_migrations() {
+    echo "1. Resetting database schema..."
+    python "$MIGRATIONS_DIR/reset_database.py" || exit 1
+    
+    echo "2. Populating bus data..."
+    python "$MIGRATIONS_DIR/populate_buses.py" || exit 1
+    
+    echo "3. Creating default admin user..."
+    python "$MIGRATIONS_DIR/create_admin.py" || exit 1
+}
+
 # Default option is to run all migrations
 if [ $# -eq 0 ]; then
-    echo "Running all migrations..."
-    $PYTHON_CMD $MIGRATIONS_DIR/run_migrations.py
+    run_all_migrations
     exit 0
 fi
 
@@ -57,16 +69,19 @@ case "$1" in
         exit 0
         ;;
     --all)
-        echo "Running all migrations..."
-        $PYTHON_CMD $MIGRATIONS_DIR/run_migrations.py
+        run_all_migrations
         ;;
-    --admin-only)
-        echo "Running admin user migration only..."
-        $PYTHON_CMD $MIGRATIONS_DIR/run_migrations.py --admin-only
+    --reset-only)
+        echo "Resetting database schema only..."
+        python "$MIGRATIONS_DIR/reset_database.py"
         ;;
     --buses-only)
-        echo "Running bus data migration only..."
-        $PYTHON_CMD $MIGRATIONS_DIR/run_migrations.py --buses-only
+        echo "Populating bus data only..."
+        python "$MIGRATIONS_DIR/populate_buses.py"
+        ;;
+    --admin-only)
+        echo "Creating default admin user only..."
+        python "$MIGRATIONS_DIR/create_admin.py"
         ;;
     --admin)
         if [ $# -ne 4 ]; then
@@ -75,7 +90,7 @@ case "$1" in
             exit 1
         fi
         echo "Creating custom admin user..."
-        $PYTHON_CMD $MIGRATIONS_DIR/run_migrations.py --admin-username "$2" --admin-email "$3" --admin-password "$4"
+        USERNAME="$2" EMAIL="$3" PASSWORD="$4" python "$MIGRATIONS_DIR/create_admin.py"
         ;;
     *)
         echo "Error: Unknown option '$1'"

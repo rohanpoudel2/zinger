@@ -6,20 +6,25 @@ NC='\033[0m'
 
 echo -e "${GREEN}=== Bus Reservation System ===${NC}"
 
-# Check if virtual environment exists
+# Create and activate virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo -e "${YELLOW}Creating virtual environment...${NC}"
-    python3 -m venv venv
+    python -m venv venv
     echo -e "${GREEN}Virtual environment created!${NC}"
 fi
 
-# Activate virtual environment
-echo -e "${YELLOW}Activating virtual environment...${NC}"
-source venv/bin/activate
+# Activate the virtual environment
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    echo -e "${YELLOW}Activating virtual environment...${NC}"
+    source venv/Scripts/activate
+else
+    echo -e "${YELLOW}Activating virtual environment...${NC}"
+    source venv/bin/activate
+fi
 
 # Install requirements
 echo -e "${YELLOW}Installing requirements...${NC}"
-pip install -r requirements.txt > /dev/null 2>&1
+pip install -r requirements.txt
 
 # Run the application
 echo -e "${GREEN}Starting the application...${NC}"

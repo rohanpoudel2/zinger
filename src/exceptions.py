@@ -32,4 +32,12 @@ class StorageError(BusReservationError):
 
 class TrackingError(BusReservationError):
     """Raised when there's an error related to bus tracking"""
+    pass
+
+class BusError(BusReservationError):
+    """Base class for bus-related errors."""
+    pass
+
+class UserError(BusReservationError):
+    """Base class for user-related errors."""
     pass 

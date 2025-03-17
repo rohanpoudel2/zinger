@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine, event, Engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
-from models.database_models import Base
+from utils.base import Base
+from models.database_models import UserModel, BusModel, RouteModel, BookingModel
 from exceptions import DatabaseError
 from contextlib import contextmanager
 from typing import Generator
@@ -11,37 +12,23 @@ import os
 console = Console()
 
 class DatabaseManager:
-    def __init__(self, db_path: str = "bus_booking.db"):
+    def __init__(self):
+        database_url = os.getenv('DATABASE_URL', 'sqlite:///bus_system.db')
+        self.engine = create_engine(database_url)
+        self.Session = sessionmaker(bind=self.engine)
+        
+    def create_tables(self):
+        """Create all database tables."""
         try:
-            # Ensure the database directory exists
-            db_dir = os.path.dirname(os.path.abspath(db_path))
-            os.makedirs(db_dir, exist_ok=True)
-            
-            # Create engine with proper configuration
-            self.engine = create_engine(
-                f"sqlite:///{db_path}",
-                echo=False,
-                pool_pre_ping=True,
-                pool_recycle=3600
-            )
-            
-            # Configure session maker
-            self.SessionLocal = sessionmaker(
-                autocommit=False,
-                autoflush=False,
-                bind=self.engine
-            )
-            
-            # Create tables
-            self.initialize_database()
-            
-        except Exception as e:
-            raise DatabaseError(f"Failed to initialize database: {str(e)}")
+            Base.metadata.create_all(self.engine)
+            console.print("[green]Database tables created successfully.[/green]")
+        except SQLAlchemyError as e:
+            raise DatabaseError(f"Failed to create database tables: {str(e)}")
 
     @contextmanager
     def get_session(self) -> Generator[Session, None, None]:
         """Get a database session with proper error handling."""
-        session = self.SessionLocal()
+        session = self.Session()
         try:
             yield session
             session.commit()
@@ -55,13 +42,13 @@ class DatabaseManager:
             session.close()
 
     def initialize_database(self) -> None:
-        """Create database tables if they don't exist."""
+        """Initialize the database by creating tables if they don't exist."""
         try:
             # Create tables without dropping existing ones
             Base.metadata.create_all(self.engine)
-            console.print("[green]Database connection established.[/green]")
+            console.print("[green]Database initialized successfully.[/green]")
         except SQLAlchemyError as e:
-            raise DatabaseError(f"Failed to create database tables: {str(e)}")
+            raise DatabaseError(f"Failed to initialize database: {str(e)}")
 
     def close(self) -> None:
         """Close database connections."""

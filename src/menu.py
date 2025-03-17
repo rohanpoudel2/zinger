@@ -2,12 +2,18 @@ from typing import Optional
 from services.booking_service import BookingService
 from services.auth_service import AuthService
 from services.location_service import LocationService
-from models.database_models import UserRole
+from models.database_models import UserRole, BusModel
 from exceptions import ValidationError, BookingError, SeatError
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich.prompt import Prompt
+from rich import box
+from sqlalchemy.orm import Session
 import os
+import signal
+import sys
+from datetime import datetime
 
 console = Console()
 
@@ -16,10 +22,38 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 class Menu:
-    def __init__(self, booking_service: BookingService, auth_service: AuthService, location_service: LocationService):
+    def __init__(
+        self,
+        booking_service: BookingService,
+        auth_service: AuthService,
+        location_service: LocationService,
+        db_session: Session
+    ):
         self.booking_service = booking_service
         self.auth_service = auth_service
         self.location_service = location_service
+        self.db_session = db_session
+        self.current_user = None
+        signal.signal(signal.SIGINT, self._handle_interrupt)
+
+    def _handle_interrupt(self, signum, frame):
+        """Handle Ctrl+C interrupt."""
+        clear_screen()
+        console.print("\n[yellow]Shutting down...[/yellow]")
+        sys.exit(0)
+
+    def start(self):
+        """Start the menu system."""
+        clear_screen()
+        try:
+            self.display_main_menu()
+        except KeyboardInterrupt:
+            clear_screen()
+            console.print("\n[yellow]Shutting down...[/yellow]")
+        except Exception as e:
+            console.print(f"\n[red]An error occurred:[/red] {str(e)}")
+            import traceback
+            console.print(traceback.format_exc())
 
     def display_main_menu(self) -> None:
         """Display the main menu options."""
@@ -30,7 +64,7 @@ class Menu:
                 location_info = ""
                 if self.location_service.get_location_name():
                     location_info = f" - Location: [yellow]{self.location_service.get_location_name()}[/yellow]"
-                console.print(Panel(f"[blue]Bus Booking System[/blue] - Logged in as [green]{user.username}[/green] ({user.role.value}){location_info}"))
+                console.print(Panel(f"[blue]Bus Booking System[/blue] - Logged in as [green]{user.username}[/green] ({user.role}){location_info}"))
                 self._display_authenticated_menu()
             else:
                 location_info = ""
@@ -46,13 +80,13 @@ class Menu:
         console.print("3. [cyan]View Available Buses[/cyan]")
         console.print("4. [red]Exit[/red]")
 
-        choice = console.input("\nEnter your choice (1-4): ")
+        choice = Prompt.ask("\nEnter your choice (1-4): ")
         
         try:
             if choice == "1":
-                self._handle_login()
+                self.login()
             elif choice == "2":
-                self._handle_registration()
+                self.register()
             elif choice == "3":
                 self.view_available_buses()
             elif choice == "4":
@@ -85,15 +119,15 @@ class Menu:
         else:
             max_choice = 5
 
-        choice = console.input(f"\nEnter your choice (1-{max_choice}): ")
+        choice = Prompt.ask(f"\nEnter your choice (1-{max_choice}): ")
         
         try:
             if choice == "1":
                 self.view_available_buses()
             elif choice == "2":
-                self._handle_booking()
+                self.book_seat()
             elif choice == "3":
-                self._view_user_bookings()
+                self.view_user_bookings()
             elif choice == "4":
                 self.auth_service.logout()
                 console.print("[green]Logged out successfully.[/green]")
@@ -115,217 +149,274 @@ class Menu:
             console.print(f"\n[red]An error occurred:[/red] {str(e)}")
             self._pause()
 
-    def _handle_login(self) -> None:
+    def login(self):
         """Handle user login."""
-        username = console.input("\nEnter username: ")
-        password = console.input("Enter password: ", password=True)
+        console.print("\n[bold cyan]Login[/bold cyan]")
         
-        if self.auth_service.login(username, password):
-            console.print("[green]Login successful![/green]")
-        else:
-            console.print("[red]Invalid username or password.[/red]")
-            self._pause()
-
-    def _handle_registration(self) -> None:
-        """Handle user registration."""
-        username = console.input("\nEnter username: ")
-        email = console.input("Enter email: ")
-        password = console.input("Enter password: ", password=True)
+        username = Prompt.ask("\nUsername")
+        password = Prompt.ask("Password", password=True)
         
         try:
-            self.auth_service.register(username, email, password)
-            console.print("[green]Registration successful! Please login.[/green]")
-        except ValidationError as e:
-            console.print(f"[red]Registration failed:[/red] {str(e)}")
+            user = self.auth_service.login(username, password)
+            if user:
+                self.current_user = user
+                console.print("\n[green]Login successful![/green]")
+                self._pause()
+            else:
+                console.print("\n[red]Invalid username or password[/red]")
+                self._pause()
+        except Exception as e:
+            console.print(f"\n[red]Login failed:[/red] {str(e)}")
+            self._pause()
+
+    def register(self):
+        """Handle user registration."""
+        console.print("\n[bold cyan]Register New User[/bold cyan]")
+        
+        username = Prompt.ask("\nUsername")
+        password = Prompt.ask("Password", password=True)
+        confirm_password = Prompt.ask("Confirm Password", password=True)
+        
+        if password != confirm_password:
+            console.print("\n[red]Passwords do not match[/red]")
+            self._pause()
+            return
+        
+        try:
+            user = self.auth_service.register(username, password)
+            if user:
+                console.print("\n[green]Registration successful! Please login.[/green]")
+            else:
+                console.print("\n[red]Registration failed[/red]")
+            self._pause()
+        except Exception as e:
+            console.print(f"\n[red]Registration failed:[/red] {str(e)}")
             self._pause()
 
     def view_available_buses(self) -> None:
-        """Display available buses."""
+        """Display available buses with real-time information."""
         try:
-            buses = self.booking_service.get_available_buses()
-            if not buses:
-                console.print("\n[yellow]No buses available.[/yellow]")
+            # Get all active buses within 5km of UNH
+            buses = self.db_session.query(BusModel).filter(
+                BusModel.is_active == True,
+                BusModel.distance_to_user <= 5.0,
+                BusModel.route.isnot(None),
+                BusModel.route != '',
+                BusModel.route != '-',
+                ~BusModel.route.contains(' - Route '),  # Skip duplicated route numbers
+                ~BusModel.route.contains('Unknown')
+            ).order_by(BusModel.distance_to_user).all()
+            
+            # Further filter to keep only buses with descriptive route names
+            valid_buses = []
+            for bus in buses:
+                # Skip if the route doesn't have a proper format
+                if not bus.route or ' - ' not in bus.route:
+                    continue
+                
+                # Split the route into number and name
+                parts = bus.route.split(' - ', 1)
+                if len(parts) != 2:
+                    continue
+                    
+                route_number, route_name = parts
+                
+                # Skip if route name is just a duplicate of the route number
+                if route_name == route_number or route_name == f"Route {route_number}":
+                    continue
+                    
+                # Skip if route name is empty
+                if not route_name.strip():
+                    continue
+                
+                # Clean up route format to be consistent
+                if route_number.startswith('Route '):
+                    route_number = route_number.replace('Route ', '')
+                
+                # Update the route to have a clean format
+                bus.route = f"{route_number} - {route_name}"
+                valid_buses.append(bus)
+            
+            if not valid_buses:
+                console.print("\nNo buses currently available near UNH.")
                 self._pause()
                 return
 
+            console.print("\n[bold cyan]Real-time Bus Information[/bold cyan]")
+            console.print("[italic]Showing buses within 5km of University of New Haven[/italic]")
+            console.print("[dim]Distance shows how far the bus is from UNH campus[/dim]")
+            
+            # Create table for bus information
             table = Table(
-                title="Available Buses in New Haven",
-                title_style="bold magenta",
-                border_style="blue"
+                title="Available Buses Near UNH",
+                box=box.DOUBLE,
+                show_header=True,
+                header_style="bold magenta",
+                padding=(0, 1),
+                collapse_padding=False,
+                width=100
             )
-            table.add_column("Bus Number", style="cyan", justify="center")
-            table.add_column("Route", style="magenta")
-            table.add_column("Current Location", style="green")
-            table.add_column("Next Departure", style="blue")
-            table.add_column("Type", style="yellow")
-            table.add_column("Fare", style="green")
-            table.add_column("Available Seats", style="cyan", justify="center")
+            
+            # Add columns with specific widths
+            table.add_column("Bus #", justify="center", style="cyan", width=8)
+            table.add_column("Route", justify="left", style="green", width=50, overflow="fold")
+            table.add_column("Distance", justify="right", style="yellow", width=12)
+            table.add_column("Last Update", justify="center", style="blue", width=12)
+            table.add_column("Status", justify="center", style="red", width=8)
 
-            for bus in buses:
-                available_seats = len(self.booking_service.get_available_seats(bus.bus_number))
+            # Add rows for each bus
+            for bus in valid_buses:
+                # Format distance with proper units
+                if hasattr(bus, 'distance_to_user') and bus.distance_to_user is not None:
+                    if bus.distance_to_user < 0.1:  # Less than 100m
+                        distance_display = "At stop"
+                    elif bus.distance_to_user < 1:
+                        distance_display = f"{bus.distance_to_user * 1000:.0f}m"
+                    else:
+                        distance_display = f"{bus.distance_to_user:.1f}km"
+                else:
+                    distance_display = "N/A"
                 
-                departure_time = "Real-time"
-                if hasattr(bus, 'get_departure_str'):
-                    departure_time = bus.get_departure_str()
-                elif bus and hasattr(bus, 'departure') and bus.departure is not None:
-                    try:
-                        departure_time = bus.departure.strftime("%I:%M %p")
-                    except:
-                        departure_time = "Real-time"
+                # Format last update time
+                if hasattr(bus, 'last_updated') and bus.last_updated:
+                    time_diff = datetime.now() - bus.last_updated
+                    if time_diff.total_seconds() < 60:  # Less than a minute
+                        last_update = "Just now"
+                    elif time_diff.total_seconds() < 3600:  # Less than an hour
+                        minutes = int(time_diff.total_seconds() // 60)
+                        last_update = f"{minutes}m ago"
+                    else:
+                        last_update = bus.last_updated.strftime("%I:%M%p")
+                else:
+                    last_update = "N/A"
                 
-                fare_display = "Free" if not hasattr(bus, 'fare') or bus.fare is None or bus.fare == 0 else f"${bus.fare:.2f}"
-                
-                type_emoji = "🚐" if hasattr(bus, 'route_type') and bus.route_type == "shuttle" else "🚌"
-                route_type = f"{type_emoji} {bus.route_type.title() if hasattr(bus, 'route_type') and bus.route_type else 'Local'}"
+                # Get bus status based on speed
+                if hasattr(bus, 'speed') and bus.speed is not None:
+                    if bus.speed < 1:  # Less than 1 mph
+                        status = "■ STOP"
+                    elif bus.speed < 10:  # Less than 10 mph
+                        status = "▲ SLOW"
+                    else:
+                        status = "● MOVE"
+                else:
+                    status = "N/A"
                 
                 table.add_row(
-                    str(bus.bus_number),
-                    bus.route if hasattr(bus, 'route') else "Unknown",
-                    bus.current_location if hasattr(bus, 'current_location') and bus.current_location else "N/A",
-                    departure_time,
-                    route_type,
-                    fare_display,
-                    f"{available_seats}/30"
+                    bus.bus_number,
+                    bus.route,
+                    distance_display,
+                    last_update,
+                    status
                 )
 
-            console.print("\n[bold blue]Real-time Bus Information[/bold blue]")
             console.print(table)
+            console.print("\n[dim]Status Legend: ■ STOP = Stopped, ▲ SLOW = Moving slowly, ● MOVE = Moving normally[/dim]")
             
-            if len(buses) > 0 and hasattr(buses[0], 'route_id') and buses[0].route_id:
-                console.print("\n[bold cyan]Route Information:[/bold cyan]")
-                console.print("[italic]Real-time data from CTTransit API[/italic]")
-                
-                location_table = Table(show_header=True, box=None)
-                location_table.add_column("Bus", style="cyan")
-                location_table.add_column("Location", style="green")
-                location_table.add_column("Speed", style="blue")
-                location_table.add_column("Next Stop", style="magenta")
-                
-                for bus in buses[:5]:
-                    if (hasattr(bus, 'latitude') and bus.latitude is not None and 
-                        hasattr(bus, 'longitude') and bus.longitude is not None):
-                        location = f"({bus.latitude:.4f}, {bus.longitude:.4f})"
-                    else:
-                        location = "N/A"
-                        
-                    speed = "N/A"
-                    if hasattr(bus, 'speed') and bus.speed is not None:
-                        try:
-                            speed = f"{bus.speed:.1f} m/s"
-                        except:
-                            speed = "N/A"
-                            
-                    next_stop = bus.next_stop if hasattr(bus, 'next_stop') and bus.next_stop else "N/A"
-                    
-                    location_table.add_row(
-                        str(bus.bus_number),
-                        location,
-                        speed,
-                        next_stop
-                    )
-                
-                console.print(location_table)
         except Exception as e:
-            console.print(f"\n[red]An error occurred while displaying buses:[/red] {str(e)}")
+            console.print(f"\n[red]Error displaying available buses: {str(e)}[/red]")
             import traceback
-            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            console.print(traceback.format_exc())
         
         self._pause()
 
     def _pause(self) -> None:
         """Pause execution until user presses Enter."""
-        console.input("\n[cyan]Press Enter to continue...[/cyan]")
+        Prompt.ask("\n[cyan]Press Enter to continue...[/cyan]")
 
-    def _handle_booking(self) -> None:
-        """Handle ticket booking."""
-        self.auth_service.require_auth()
-        
-        buses = self.booking_service.get_available_buses()
-        if not buses:
-            console.print("\n[yellow]No buses available for booking.[/yellow]")
-            self._pause()
-            return
-
-        self.view_available_buses()
-        
-        bus_number = console.input("\nEnter bus number to book: ")
-        passenger_name = console.input("Enter passenger name: ")
-        phone = console.input("Enter phone number: ")
-        
-        available_seats = self.booking_service.get_available_seats(bus_number)
-        if not available_seats:
-            console.print("[red]No seats available on this bus.[/red]")
-            self._pause()
-            return
-            
-        console.print("\n[cyan]Available Seats:[/cyan]")
-        seat_groups = [available_seats[i:i+6] for i in range(0, len(available_seats), 6)]
-        for row in seat_groups:
-            console.print(" ".join(f"[green]{seat}[/green]" for seat in row))
-        
-        seat = console.input("\nEnter seat number (e.g., 1A): ")
-        
+    def book_seat(self) -> None:
+        """Book a seat on a bus."""
         try:
-            booking_id = self.booking_service.create_booking(
-                bus_number=bus_number,
-                passenger_name=passenger_name,
-                phone=phone,
-                seat=seat,
-                user_id=self.auth_service.get_current_user().id
-            )
-            console.print(f"\n[green]Booking successful! Your booking ID is: {booking_id}[/green]")
-            self._pause()
-        except (ValidationError, BookingError, SeatError) as e:
-            console.print(f"\n[red]Booking failed:[/red] {str(e)}")
-            self._pause()
-
-    def _view_user_bookings(self) -> None:
-        """View bookings for the current user."""
-        try:
-            self.auth_service.require_auth()
-            bookings = self.booking_service.get_user_bookings(
-                self.auth_service.get_current_user().id
-            )
-            
-            if not bookings:
-                console.print("\n[yellow]No bookings found.[/yellow]")
+            # Require authentication
+            try:
+                self.auth_service.require_auth()
+            except Exception as e:
+                console.print(f"\n[red]Authentication required:[/red] {str(e)}")
                 self._pause()
                 return
-
-            table = Table(title="Your Bookings")
-            table.add_column("Booking ID", style="cyan")
-            table.add_column("Bus Route", style="magenta")
-            table.add_column("Seat", style="green")
-            table.add_column("Departure Time", style="blue")
-            table.add_column("Status", style="yellow")
-
-            for booking in bookings:
-                # Get bus details
-                bus = self.booking_service.bus_repository.get(booking.bus_number)
                 
-                # Use the helper method for departure time
-                departure_time = "Real-time"
-                if bus and hasattr(bus, 'get_departure_str'):
-                    departure_time = bus.get_departure_str()
-                elif bus and hasattr(bus, 'departure') and bus.departure is not None:
-                    try:
-                        departure_time = bus.departure.strftime("%I:%M %p")
-                    except:
-                        departure_time = "Real-time"
+            console.print("\n[bold cyan]Book a Seat[/bold cyan]")
+            
+            # Show available buses
+            self.view_available_buses()
+            
+            # Get bus number
+            bus_number = console.input("\nEnter bus number to book: ")
+            
+            # Get passenger name
+            passenger_name = console.input("Enter passenger name: ")
+            if not passenger_name:
+                console.print("[red]Passenger name cannot be empty[/red]")
+                self._pause()
+                return
                 
-                table.add_row(
-                    str(booking.booking_id),
-                    bus.route if bus and hasattr(bus, 'route') else "Unknown",
-                    booking.seat,
-                    departure_time,
-                    booking.status.value if hasattr(booking, 'status') else "Unknown"
-                )
-
-            console.print(table)
+            # Get phone number
+            phone_number = console.input("Enter phone number: ")
+            if not phone_number:
+                console.print("[red]Phone number cannot be empty[/red]")
+                self._pause()
+                return
+                
+            # Book the seat
+            booking_id = self.booking_service.book_seat(bus_number, passenger_name, phone_number)
+            
+            console.print("\n[green]Booking successful![/green]")
+            console.print(f"Booking ID: {booking_id}")
+            console.print(f"Bus: {bus_number}")
+            console.print(f"Passenger: {passenger_name}")
+            console.print(f"Phone: {phone_number}")
+            
         except Exception as e:
-            console.print(f"\n[red]An error occurred while viewing bookings:[/red] {str(e)}")
-            import traceback
-            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            console.print(f"\n[red]An error occurred:[/red] {str(e)}")
+            
+        self._pause()
+
+    def view_user_bookings(self):
+        """Display user's bookings."""
+        if not self.current_user:
+            console.print("\n[red]Please login first[/red]")
+            self._pause()
+            return
+        
+        try:
+            bookings = self.booking_service.get_user_bookings(self.current_user.id)
+            
+            if not bookings:
+                console.print("\n[yellow]You have no bookings[/yellow]")
+                self._pause()
+                return
+            
+            table = Table(
+                title="Your Bookings",
+                box=box.DOUBLE,
+                show_header=True,
+                header_style="bold"
+            )
+            
+            table.add_column("Booking ID", justify="center")
+            table.add_column("Bus", justify="left")
+            table.add_column("Route", justify="left")
+            table.add_column("Seats", justify="center")
+            table.add_column("Status", justify="center")
+            table.add_column("Departure", justify="center")
+            
+            for booking in bookings:
+                bus = self.db_session.query(BusModel).get(booking.bus_id)
+                if bus:
+                    departure = booking.departure_time.strftime("%I:%M %p") if booking.departure_time else "N/A"
+                    table.add_row(
+                        str(booking.id),
+                        bus.bus_number,
+                        bus.route,
+                        str(booking.seats),
+                        booking.status,
+                        departure
+                    )
+            
+            console.print(table)
+            
+        except Exception as e:
+            console.print(f"\n[red]Error retrieving bookings:[/red] {str(e)}")
+        
         self._pause()
 
     def _view_all_bookings(self) -> None:

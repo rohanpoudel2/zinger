@@ -1,87 +1,58 @@
 # Database Migrations
 
-This directory contains scripts to set up and populate the database with initial data.
+This directory contains scripts for managing the database schema.
+
+## Reset Database Approach
+
+We use a "reset" approach for database migrations. Instead of creating incremental migration scripts, we reset the entire database when schema changes are needed. This approach is simpler and avoids migration conflicts.
 
 ## Available Scripts
 
-- `run_migrations.py`: Main Python script to run all migrations
-- `run_migrations.sh`: Shell script for Unix/Linux/Mac users
-- `run_migrations.bat`: Batch script for Windows users
-- `create_admin.py`: Creates an admin user
-- `populate_buses.py`: Populates the database with sample bus data
+### reset_database.py
 
-## Usage
-
-### Using Shell Scripts (Recommended)
-
-#### Unix/Linux/Mac:
+This script drops all tables and recreates them with the latest schema. Use this when you need to update the database schema:
 
 ```bash
-# Make the script executable
-chmod +x run_migrations.sh
-
-# Run all migrations
-./run_migrations.sh
-
-# Show help
-./run_migrations.sh --help
-
-# Run specific migrations
-./run_migrations.sh --admin-only
-./run_migrations.sh --buses-only
-
-# Create custom admin user
-./run_migrations.sh --admin johndoe john@example.com password123
+export PYTHONPATH=src:$PYTHONPATH
+python src/migrations/reset_database.py
 ```
 
-#### Windows:
+### populate_buses.py
 
-```cmd
-# Run all migrations
-run_migrations.bat
-
-# Show help
-run_migrations.bat --help
-
-# Run specific migrations
-run_migrations.bat --admin-only
-run_migrations.bat --buses-only
-
-# Create custom admin user
-run_migrations.bat --admin johndoe john@example.com password123
-```
-
-### Using Python Directly
+This script populates the database with initial bus data from the CTTransit API:
 
 ```bash
-# Run all migrations
-python run_migrations.py
-
-# Run specific migrations
-python run_migrations.py --admin-only
-python run_migrations.py --buses-only
-
-# Create custom admin user
-python run_migrations.py --admin-username "yourusername" --admin-email "your@email.com" --admin-password "yourpassword"
+export PYTHONPATH=src:$PYTHONPATH
+python src/migrations/populate_buses.py
 ```
 
-### Run Individual Scripts
+### create_admin.py
+
+This script creates an admin user in the database:
 
 ```bash
-# Create default admin user
-python create_admin.py
-
-# Create custom admin user
-python create_admin.py username email password
-
-# Populate buses
-python populate_buses.py
+export PYTHONPATH=src:$PYTHONPATH
+python src/migrations/create_admin.py
 ```
 
-## Default Admin Credentials
+## When to Use Reset
 
-- Username: admin
-- Email: admin@example.com
-- Password: admin123
+Use the reset approach when:
 
-**Note:** It's recommended to change these default credentials in a production environment. 
+1. You add new fields to a model
+2. You change field types
+3. You add or modify relationships between models
+4. You add new models
+
+Note that resetting the database will delete all existing data. In a production environment, you would need to implement a data backup and restoration strategy.
+
+## Database Schema
+
+The current database schema includes the following tables:
+
+- `users`: User accounts
+- `buses`: Bus information
+- `routes`: Route information
+- `bookings`: User bookings
+
+See the `models/database_models.py` file for the complete schema definition. 

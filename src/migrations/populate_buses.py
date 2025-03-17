@@ -2,13 +2,14 @@ import sys
 import os
 from datetime import datetime
 import requests
+import random
 
 # Add the parent directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.database_manager import DatabaseManager
 from repositories.bus_repository import BusRepository
-from models.database_models import BusModel
+from models.database_models import BusModel, RouteModel
 from sqlalchemy import text
 
 def fetch_vehicle_positions():
@@ -22,22 +23,40 @@ def fetch_vehicle_positions():
         print(f"Error fetching vehicle positions: {str(e)}")
         return None
 
+def create_route(session, route_id):
+    """Create a new route in the database."""
+    try:
+        route = RouteModel(
+            route_id=route_id,
+            route_short_name=f"Route {route_id}",
+            route_long_name=f"Route {route_id}",
+            route_type="local"
+        )
+        session.add(route)
+        session.commit()
+        print(f"Created route: {route_id}")
+        return route
+    except Exception as e:
+        print(f"Error creating route {route_id}: {str(e)}")
+        session.rollback()
+        return None
+
 def get_route_info(session, route_id):
     """Get route information from the routes table."""
     if not route_id:
         return None
-        
-    result = session.execute(
-        text("SELECT route_short_name, route_long_name FROM routes WHERE route_id = :route_id"),
-        {"route_id": route_id}
-    ).fetchone()
     
-    if result:
-        return {
-            "short_name": result[0] or "",
-            "long_name": result[1] or ""
-        }
-    return None
+    try:
+        route = session.query(RouteModel).filter_by(route_id=route_id).first()
+        if route:
+            return {
+                "short_name": route.route_short_name or "",
+                "long_name": route.route_long_name or ""
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting route info for {route_id}: {str(e)}")
+        return None
 
 def populate_buses():
     """Populate the database with real CTTransit bus data."""
@@ -57,14 +76,27 @@ def populate_buses():
         # Initialize bus repository
         bus_repository = BusRepository(session)
         
-        # Get all route IDs from the database for comparison
-        available_routes = session.execute(
-            text("SELECT route_id FROM routes")
-        ).fetchall()
-        available_route_ids = {r[0] for r in available_routes}
-        print(f"\nAvailable route IDs in database: {available_route_ids}\n")
+        # First, gather all unique route IDs
+        route_ids = set()
+        for entity in vehicle_data['entity']:
+            if 'vehicle' in entity and not entity.get('isDeleted', False):
+                route_id = entity['vehicle'].get('trip', {}).get('route_id', '')
+                if route_id:
+                    route_ids.add(route_id)
         
-        buses_created = 0
+        # Create routes first
+        print("Creating routes...")
+        for route_id in route_ids:
+            try:
+                route = session.query(RouteModel).filter_by(route_id=route_id).first()
+                if not route:
+                    route = create_route(session, route_id)
+            except Exception as e:
+                print(f"Error checking/creating route {route_id}: {str(e)}")
+                continue
+        
+        # Now process buses
+        print("Processing buses...")
         for entity in vehicle_data['entity']:
             if 'vehicle' not in entity or entity.get('isDeleted', False):
                 continue
@@ -78,7 +110,6 @@ def populate_buses():
             position = vehicle.get('position', {})
             trip = vehicle.get('trip', {})
             route_id = trip.get('route_id', '')
-            print(f"Bus {vehicle_id} has route_id: {route_id}")
             
             # Get route information
             route_info = get_route_info(session, route_id)
@@ -88,43 +119,45 @@ def populate_buses():
             try:
                 bus = bus_repository.get(vehicle_id)
                 if not bus:
+                    # Create new bus
                     bus = BusModel(
                         bus_number=vehicle_id,
-                        route=route_name,
                         route_id=route_id,
-                        trip_id=trip.get('trip_id', ''),
+                        route=route_name,
                         latitude=position.get('latitude', 0.0),
                         longitude=position.get('longitude', 0.0),
                         speed=position.get('speed', 0.0),
-                        bearing=position.get('bearing', 0.0),
+                        trip_id=trip.get('trip_id', ''),
+                        next_stop=None,
+                        last_updated=datetime.utcnow(),
                         is_active=True,
-                        capacity=50,  # Default capacity
-                        current_location='En Route',
+                        current_location=None,
+                        available_seats=random.randint(10, 30),
+                        total_seats=30,
+                        fare=1.75,
                         route_type='local',
-                        agency_id='CTTRANSIT',
-                        last_updated=datetime.fromtimestamp(vehicle.get('timestamp', 0)),
-                        next_stop=vehicle.get('stop_id', '')
+                        distance_to_user=0.0
                     )
-                    bus_repository.add(bus)
-                    buses_created += 1
-                    print(f"Added bus: {vehicle_id} - {route_name}")
+                    session.add(bus)
                 else:
                     # Update existing bus
-                    bus.route = route_name
                     bus.route_id = route_id
-                    bus.trip_id = trip.get('trip_id', '')
+                    bus.route = route_name
                     bus.latitude = position.get('latitude', 0.0)
                     bus.longitude = position.get('longitude', 0.0)
                     bus.speed = position.get('speed', 0.0)
-                    bus.bearing = position.get('bearing', 0.0)
-                    bus.last_updated = datetime.fromtimestamp(vehicle.get('timestamp', 0))
-                    bus.next_stop = vehicle.get('stop_id', '')
-                    print(f"Updated bus: {vehicle_id} - {route_name}")
-                    
+                    bus.trip_id = trip.get('trip_id', '')
+                    bus.last_updated = datetime.utcnow()
+                    bus.is_active = True
+                    bus.fare = 1.75
+                    bus.distance_to_user = 0.0
+                
+                session.commit()
+                print(f"Successfully processed bus {vehicle_id}")
             except Exception as e:
                 print(f"Error processing bus {vehicle_id}: {str(e)}")
-        
-        print(f"Successfully added {buses_created} buses to the database.")
+                session.rollback()
+                continue
 
 if __name__ == "__main__":
     populate_buses()
