@@ -360,8 +360,13 @@ class Menu:
                 self._pause()
                 return
                 
-            # Book the seat
-            booking_id = self.booking_service.book_seat(bus_number, passenger_name, phone_number)
+            # Book the seat, passing the auth_service instance
+            booking_id = self.booking_service.book_seat(
+                bus_number, 
+                passenger_name, 
+                phone_number,
+                auth_service=self.auth_service
+            )
             
             console.print("\n[green]Booking successful![/green]")
             console.print(f"Booking ID: {booking_id}")

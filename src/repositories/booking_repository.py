@@ -6,6 +6,7 @@ from .base_repository import BaseRepository
 from exceptions import BookingError
 from datetime import datetime
 import logging
+import pytz
 
 class BookingRepository(BaseRepository[BookingModel]):
     def __init__(self, session: Session):
@@ -113,16 +114,21 @@ class BookingRepository(BaseRepository[BookingModel]):
         seats_booked = self.get_seats_booked(bus_id)
         return (total_seats - seats_booked) >= seats_requested
 
-    def book_seat(self, bus_id: int, passenger_name: str, phone_number: str) -> int:
+    def book_seat(self, bus_id: int, passenger_name: str, phone_number: str, user_id: Optional[int] = None) -> int:
         """Create a booking and return the booking ID."""
         try:
+            # Use pytz to get proper timezone for New York
+            eastern = pytz.timezone('America/New_York')
+            now = datetime.now(eastern)
+            
             booking = BookingModel(
                 bus_id=bus_id,
                 passenger_name=passenger_name,
                 phone_number=phone_number,
-                booking_time=datetime.utcnow(),
+                booking_time=now,
                 status='confirmed',
-                seats=1
+                seats=1,
+                user_id=user_id
             )
             self.session.add(booking)
             self.session.commit()

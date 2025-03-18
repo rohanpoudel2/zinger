@@ -90,7 +90,7 @@ class BookingService:
         """Get all active bookings."""
         return self.booking_repo.get_active_bookings()
 
-    def book_seat(self, bus_number, passenger_name, phone_number):
+    def book_seat(self, bus_number, passenger_name, phone_number, auth_service=None):
         """Book a seat on a bus."""
         try:
             # Get the bus
@@ -102,11 +102,21 @@ class BookingService:
             if not bus.is_active:
                 raise ValidationError(f"Bus {bus_number} is not currently active")
             
-            # Create a new booking using book_seat method
+            # Get current user ID if available
+            user_id = None
+            if auth_service and auth_service.is_authenticated():
+                user = auth_service.get_current_user()
+                user_id = user.id
+                logging.info(f"Booking with authenticated user_id: {user_id}")
+            else:
+                logging.warning("No auth_service provided or user not authenticated")
+            
+            # Create a new booking using book_seat method with user_id
             return self.booking_repo.book_seat(
                 bus_id=bus.id,
                 passenger_name=passenger_name,
-                phone_number=phone_number
+                phone_number=phone_number,
+                user_id=user_id
             )
         except Exception as e:
             logging.error(f"Error booking seat: {e}")

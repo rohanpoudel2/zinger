@@ -5,3 +5,4 @@ rich>=13.7.0
 requests>=2.32.3
 geopy>=2.4.1
 geocoder>=1.38.1
+pytz>=2025.1
