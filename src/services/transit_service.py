@@ -109,7 +109,9 @@ class TransitService:
         dlon = lon2 - lon1
         a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
         c = 2 * atan2(sqrt(a), sqrt(1-a))
-        return R * c
+        distance_km = R * c
+        # Convert distance from km to miles
+        return distance_km * 0.621371
 
     def _format_route_name(self, route_data) -> Optional[str]:
         """Format route name from either string or dictionary data. Returns None for invalid routes."""
@@ -137,11 +139,16 @@ class TransitService:
             
         return None
 
-    def fetch_real_time_buses(self, user_location=None, radius_km=5.0) -> List[Dict]:
+    def fetch_real_time_buses(self, user_location=None, radius_miles=3.0) -> List[Dict]:
         """Fetch real-time bus data for buses within radius of UNH."""
         try:
             # Always use UNH location
             user_lat, user_lon = self.UNH_LOCATION
+            if user_location:
+                user_lat, user_lon = user_location
+            
+            # Convert radius from miles to kilometers for internal calculations
+            radius_km = radius_miles / 0.621371
             
             response = requests.get(self.vehicle_positions_url)
             response.raise_for_status()

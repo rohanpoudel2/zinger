@@ -268,12 +268,16 @@ class Menu:
             for bus in valid_buses:
                 # Format distance with proper units
                 if hasattr(bus, 'distance_to_user') and bus.distance_to_user is not None:
+                    # Convert km to miles (1 km ≈ 0.621371 miles)
+                    distance_miles = bus.distance_to_user * 0.621371
                     if bus.distance_to_user < 0.1:  # Less than 100m
                         distance_display = "At stop"
                     elif bus.distance_to_user < 1:
-                        distance_display = f"{bus.distance_to_user * 1000:.0f}m"
+                        # Convert meters to feet (1m ≈ 3.28084 feet)
+                        feet = bus.distance_to_user * 1000 * 3.28084
+                        distance_display = f"{feet:.0f}ft"
                     else:
-                        distance_display = f"{bus.distance_to_user:.1f}km"
+                        distance_display = f"{distance_miles:.1f}mi"
                 else:
                     distance_display = "N/A"
                 

@@ -39,13 +39,15 @@ class LocationService:
 
     def calculate_distance(self, lat1: float, lng1: float, lat2: float, lng2: float) -> float:
         """
-        Calculate the distance between two points in kilometers.
+        Calculate the distance between two points in miles.
         """
-        return geodesic((lat1, lng1), (lat2, lng2)).kilometers
+        km_distance = geodesic((lat1, lng1), (lat2, lng2)).kilometers
+        # Convert kilometers to miles
+        return km_distance * 0.621371
     
-    def filter_nearby_buses(self, buses: List, max_distance: float = 5.0) -> List:
+    def filter_nearby_buses(self, buses: List, max_distance_miles: float = 3.0) -> List:
         """
-        Filter buses to only include those within the specified distance (in km).
+        Filter buses to only include those within the specified distance (in miles).
         """
         if not self.current_location:
             self._update_location()
@@ -64,10 +66,10 @@ class LocationService:
                     bus.longitude
                 )
                 
-                # Add distance attribute to bus object
+                # Add distance attribute to bus object (already in miles due to calculate_distance update)
                 bus.distance = round(distance, 2)
                 
-                if distance <= max_distance:
+                if distance <= max_distance_miles:
                     nearby_buses.append(bus)
                     
         # Sort by distance
