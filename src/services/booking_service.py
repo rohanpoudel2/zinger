@@ -120,4 +120,94 @@ class BookingService:
             )
         except Exception as e:
             logging.error(f"Error booking seat: {e}")
-            raise ValidationError(f"Failed to book seat: {e}") 
+            raise ValidationError(f"Failed to book seat: {e}")
+
+    def export_bookings_to_csv(self, filepath: str) -> bool:
+        """Export all bookings to a CSV file."""
+        try:
+            import csv
+            import os
+            from datetime import datetime
+            
+            # Get all bookings
+            bookings = self.get_all_bookings()
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            # Write to CSV
+            with open(filepath, 'w', newline='') as csvfile:
+                fieldnames = ['Booking ID', 'User ID', 'Bus Number', 'Passenger Name', 
+                             'Phone Number', 'Status', 'Booking Time', 'Route']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                
+                for booking in bookings:
+                    # Get bus information
+                    bus = self.bus_repo.get_by_id(booking.bus_id)
+                    bus_number = bus.bus_number if bus else "N/A"
+                    route = bus.route if bus else "N/A"
+                    
+                    # Format booking time
+                    booking_time = booking.booking_time.strftime("%Y-%m-%d %H:%M:%S") if booking.booking_time else "N/A"
+                    
+                    writer.writerow({
+                        'Booking ID': booking.id,
+                        'User ID': booking.user_id if booking.user_id else "N/A",
+                        'Bus Number': bus_number,
+                        'Passenger Name': booking.passenger_name,
+                        'Phone Number': booking.phone_number,
+                        'Status': booking.status,
+                        'Booking Time': booking_time,
+                        'Route': route
+                    })
+            
+            return True
+        except Exception as e:
+            logging.error(f"Error exporting bookings to CSV: {e}")
+            return False
+            
+    def export_user_bookings_to_csv(self, user_id: int, filepath: str) -> bool:
+        """Export bookings for a specific user to a CSV file."""
+        try:
+            import csv
+            import os
+            from datetime import datetime
+            
+            # Get bookings for the specified user
+            bookings = self.get_user_bookings(user_id)
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            # Write to CSV
+            with open(filepath, 'w', newline='') as csvfile:
+                fieldnames = ['Booking ID', 'User ID', 'Bus Number', 'Passenger Name', 
+                             'Phone Number', 'Status', 'Booking Time', 'Route']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                
+                for booking in bookings:
+                    # Get bus information
+                    bus = self.bus_repo.get_by_id(booking.bus_id)
+                    bus_number = bus.bus_number if bus else "N/A"
+                    route = bus.route if bus else "N/A"
+                    
+                    # Format booking time
+                    booking_time = booking.booking_time.strftime("%Y-%m-%d %H:%M:%S") if booking.booking_time else "N/A"
+                    
+                    writer.writerow({
+                        'Booking ID': booking.id,
+                        'User ID': booking.user_id if booking.user_id else "N/A",
+                        'Bus Number': bus_number,
+                        'Passenger Name': booking.passenger_name,
+                        'Phone Number': booking.phone_number,
+                        'Status': booking.status,
+                        'Booking Time': booking_time,
+                        'Route': route
+                    })
+            
+            return True
+        except Exception as e:
+            logging.error(f"Error exporting user bookings to CSV: {e}")
+            return False 

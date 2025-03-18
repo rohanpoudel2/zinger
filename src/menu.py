@@ -115,7 +115,8 @@ class Menu:
             console.print("\n[yellow]Admin Options:[/yellow]")
             console.print("6. [cyan]View All Bookings[/cyan]")
             console.print("7. [cyan]Manage Users[/cyan]")
-            max_choice = 7
+            console.print("8. [cyan]Export Bookings to CSV[/cyan]")
+            max_choice = 8
         else:
             max_choice = 5
 
@@ -139,6 +140,8 @@ class Menu:
                 self._view_all_bookings()
             elif choice == "7" and self.auth_service.get_current_user().role == UserRole.ADMIN:
                 self._manage_users()
+            elif choice == "8" and self.auth_service.get_current_user().role == UserRole.ADMIN:
+                self._export_bookings_to_csv()
             else:
                 console.print("[red]Invalid choice. Please try again.[/red]")
                 self._pause()
@@ -545,4 +548,128 @@ class Menu:
                 console.print("[red]Failed to deactivate user account.[/red]")
         except ValidationError as e:
             console.print(f"[red]Error:[/red] {str(e)}")
+        self._pause()
+
+    def _export_bookings_to_csv(self) -> None:
+        """Export all bookings to a CSV file (admin only)."""
+        self.auth_service.require_role(UserRole.ADMIN)
+        
+        console.print("\n[yellow]Export Bookings to CSV[/yellow]")
+        console.print("1. [cyan]Export All Bookings[/cyan]")
+        console.print("2. [cyan]Export Bookings for a Specific User[/cyan]")
+        console.print("3. [cyan]Back to Main Menu[/cyan]")
+        
+        choice = console.input("\nEnter your choice (1-3): ")
+        
+        try:
+            if choice == "1":
+                self._export_all_bookings_to_csv()
+            elif choice == "2":
+                self._export_bookings_for_specific_user()
+            elif choice == "3":
+                return
+            else:
+                console.print("[red]Invalid choice. Please try again.[/red]")
+        except ValidationError as e:
+            console.print(f"[red]Error:[/red] {str(e)}")
+
+    def _export_all_bookings_to_csv(self) -> None:
+        """Export all bookings to a CSV file."""
+        try:
+            # Check if there are any bookings
+            bookings = self.booking_service.get_all_bookings()
+            
+            if not bookings:
+                console.print("\n[yellow]No bookings found.[/yellow]")
+                self._pause()
+                return
+
+            # Get the export path
+            from datetime import datetime
+            import os
+            
+            # Create 'exports' directory if it doesn't exist
+            exports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'exports')
+            os.makedirs(exports_dir, exist_ok=True)
+            
+            # Default filename with timestamp
+            default_filename = f"bookings_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filename = Prompt.ask("\nEnter filename to save the CSV file", default=default_filename)
+            
+            # Make sure filename has .csv extension
+            if not filename.lower().endswith('.csv'):
+                filename += '.csv'
+                
+            # Create full filepath
+            filepath = os.path.join(exports_dir, filename)
+            
+            # Export to CSV
+            if self.booking_service.export_bookings_to_csv(filepath):
+                console.print(f"\n[green]Bookings exported successfully to:[/green] {filepath}")
+            else:
+                console.print("\n[red]Failed to export bookings[/red]")
+                
+        except Exception as e:
+            console.print(f"\n[red]Error exporting bookings: {str(e)}[/red]")
+            import traceback
+            console.print(traceback.format_exc())
+        self._pause()
+
+    def _export_bookings_for_specific_user(self) -> None:
+        """Export bookings for a specific user."""
+        try:
+            # Show user list first
+            self._view_all_users()
+            
+            user_id = Prompt.ask("\nEnter user ID")
+            
+            if not user_id:
+                console.print("[red]User ID cannot be empty[/red]")
+                self._pause()
+                return
+            
+            # Verify user exists
+            user = self.auth_service.get_user_by_id(int(user_id))
+            if not user:
+                console.print("[red]User not found[/red]")
+                self._pause()
+                return
+                
+            # Get user's bookings
+            bookings = self.booking_service.get_user_bookings(int(user_id))
+            
+            if not bookings:
+                console.print(f"\n[yellow]No bookings found for user {user.username}.[/yellow]")
+                self._pause()
+                return
+
+            # Get the export path
+            from datetime import datetime
+            import os
+            
+            # Create 'exports' directory if it doesn't exist
+            exports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'exports')
+            os.makedirs(exports_dir, exist_ok=True)
+            
+            # Default filename with username and timestamp
+            default_filename = f"bookings_user_{user.username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filename = Prompt.ask("\nEnter filename to save the CSV file", default=default_filename)
+            
+            # Make sure filename has .csv extension
+            if not filename.lower().endswith('.csv'):
+                filename += '.csv'
+                
+            # Create full filepath
+            filepath = os.path.join(exports_dir, filename)
+            
+            # Use the user-specific export function
+            if self.booking_service.export_user_bookings_to_csv(int(user_id), filepath):
+                console.print(f"\n[green]Bookings for user {user.username} exported successfully to:[/green] {filepath}")
+            else:
+                console.print("\n[red]Failed to export bookings[/red]")
+                
+        except Exception as e:
+            console.print(f"\n[red]Error exporting bookings: {str(e)}[/red]")
+            import traceback
+            console.print(traceback.format_exc())
         self._pause() 
