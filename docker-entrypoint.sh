@@ -5,9 +5,14 @@ chmod +x /app/run_migrations.sh
 
 # If the first argument is "migrate"
 if [ "$1" = "migrate" ]; then
-    # Pass all remaining arguments to the migration script
-    shift
-    ./run_migrations.sh "$@"
+    # If no additional arguments, run all migrations
+    if [ "$#" -eq 1 ]; then
+        ./run_migrations.sh
+    else
+        # Pass all remaining arguments to the migration script
+        shift
+        ./run_migrations.sh "$@"
+    fi
 elif [ "$1" = "start" ]; then
     # Run the application
     python src/main.py
