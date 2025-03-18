@@ -14,9 +14,13 @@ class BusRepository(BaseRepository[BusModel]):
         self.session.merge(bus)
         self.session.commit()
 
-    def get(self, bus_number: str) -> Optional[BusModel]:
-        """Get bus details by bus number."""
-        return self.session.get(BusModel, bus_number)
+    def get(self, id: str) -> Optional[BusModel]:
+        """Get bus details by ID."""
+        try:
+            return self.session.query(BusModel).filter(BusModel.id == id).first()
+        except Exception as e:
+            logging.error(f"Error getting bus by ID: {e}")
+            return None
 
     def get_all(self) -> List[BusModel]:
         """Get all buses from the database."""
@@ -32,14 +36,19 @@ class BusRepository(BaseRepository[BusModel]):
             self.session.rollback()
             raise e
 
-    def delete(self, bus_number: str) -> bool:
-        """Delete a bus by bus number."""
-        bus = self.session.get(BusModel, bus_number)
-        if bus:
-            self.session.delete(bus)
-            self.session.commit()
-            return True
-        return False
+    def delete(self, id: str) -> bool:
+        """Delete a bus by ID."""
+        try:
+            bus = self.get(id)
+            if bus:
+                self.session.delete(bus)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logging.error(f"Error deleting bus: {e}")
+            return False
 
     def get_all_as_dict(self) -> Dict[str, BusModel]:
         """Get all buses as a dictionary keyed by bus number."""

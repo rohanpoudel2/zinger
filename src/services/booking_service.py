@@ -1,9 +1,9 @@
 from typing import List, Optional, Dict
-from models.database_models import BookingModel, BookingStatus, BusModel, UserModel
+from models.database_models import BookingModel, BookingStatus, BusModel
 from repositories.booking_repository import BookingRepository
 from repositories.bus_repository import BusRepository
 from repositories.user_repository import UserRepository
-from exceptions import BookingError, ValidationError, SeatError, BusError, UserError
+from exceptions import BookingError, ValidationError, BusError, UserError
 from datetime import datetime
 import logging
 
@@ -12,7 +12,6 @@ class BookingService:
         self.booking_repo = booking_repo
         self.bus_repo = bus_repo
         self.user_repo = user_repo
-        self.booking_id_counter = 1000
 
     def get_available_buses(self) -> List:
         """Get all available buses."""
@@ -38,10 +37,6 @@ class BookingService:
             if not bus.is_active:
                 raise BusError("Bus is not active")
 
-            # Check seat availability
-            if not self.booking_repo.is_seat_available(bus_id, seats, bus.total_seats):
-                raise BookingError("Not enough seats available")
-
             # Create booking
             booking = self.booking_repo.create_booking(
                 user_id=user_id,
@@ -49,10 +44,6 @@ class BookingService:
                 seats=seats,
                 departure_time=bus.last_updated
             )
-
-            # Update bus available seats
-            bus.available_seats -= seats
-            self.bus_repo.update(bus)
 
             return booking
 
@@ -87,46 +78,13 @@ class BookingService:
             if booking.status == "cancelled":
                 raise BookingError("Booking is already cancelled")
 
-            # Get the bus to update available seats
-            bus = self.bus_repo.get_by_id(booking.bus_id)
-            if not bus:
-                raise BusError("Bus not found")
-
             # Cancel the booking
-            if self.booking_repo.cancel_booking(booking_id):
-                # Return seats to available pool
-                bus.available_seats += booking.seats
-                self.bus_repo.update(bus)
-                return True
-
-            return False
+            return self.booking_repo.cancel_booking(booking_id)
 
         except (BookingError, BusError) as e:
             raise e
         except Exception as e:
             raise BookingError(f"Failed to cancel booking: {str(e)}")
-
-    def get_available_seats(self, bus_number: str) -> int:
-        """Get the number of available seats on a bus."""
-        try:
-            # Get the bus
-            bus = self.bus_repo.get_by_bus_number(bus_number)
-            if not bus:
-                raise ValidationError(f"Bus with number {bus_number} not found")
-            
-            # Get the total number of seats
-            total_seats = bus.total_seats if hasattr(bus, 'total_seats') else 30
-            
-            # Get the number of confirmed bookings
-            confirmed_bookings = self.booking_repo.count_by_bus_status(bus.id, 'confirmed')
-            
-            # Calculate available seats
-            available_seats = total_seats - confirmed_bookings
-            
-            return available_seats
-        except Exception as e:
-            logging.error(f"Error getting available seats: {e}")
-            raise ValidationError(f"Failed to get available seats: {e}")
 
     def get_active_bookings(self) -> List[BookingModel]:
         """Get all active bookings."""
@@ -144,22 +102,12 @@ class BookingService:
             if not bus.is_active:
                 raise ValidationError(f"Bus {bus_number} is not currently active")
             
-            # Check if bus has available seats
-            available_seats = self.get_available_seats(bus_number)
-            if available_seats <= 0:
-                raise ValidationError(f"No available seats on bus {bus_number}")
-            
-            # Create a new booking
-            booking = BookingModel(
+            # Create a new booking using book_seat method
+            return self.booking_repo.book_seat(
                 bus_id=bus.id,
                 passenger_name=passenger_name,
-                phone_number=phone_number,
-                booking_time=datetime.utcnow(),
-                status='confirmed'
+                phone_number=phone_number
             )
-            
-            # Save the booking
-            return self.booking_repo.add(booking)
         except Exception as e:
             logging.error(f"Error booking seat: {e}")
             raise ValidationError(f"Failed to book seat: {e}") 

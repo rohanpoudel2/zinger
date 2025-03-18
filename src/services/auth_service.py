@@ -28,7 +28,7 @@ class AuthService:
                 is_active=True
             )
             
-            self.user_repository.add(user, password)
+            self.user_repository.add_with_password(user, password)
             return self.user_repository.get_by_username(username)
         except Exception as e:
             raise ValidationError(f"Registration failed: {str(e)}")

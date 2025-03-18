@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from models.database_models import UserModel, UserRole
 from .base_repository import BaseRepository
 from werkzeug.security import generate_password_hash, check_password_hash
+import logging
 
 class User:
     def __init__(self, id: int, username: str, email: str, role: UserRole, is_active: bool = True):
@@ -13,11 +14,49 @@ class User:
         self.role = role
         self.is_active = is_active
 
-class UserRepository(BaseRepository[User]):
+class UserRepository(BaseRepository[UserModel]):
     def __init__(self, session: Session):
         self.session = session
 
-    def add(self, user: User, password: str) -> None:
+    def add(self, user: UserModel) -> None:
+        """Add a new user to the database."""
+        self.session.add(user)
+        self.session.commit()
+
+    def get(self, id: str) -> Optional[UserModel]:
+        """Get a user by ID."""
+        try:
+            return self.session.query(UserModel).filter(UserModel.id == id).first()
+        except Exception as e:
+            logging.error(f"Error getting user by ID: {e}")
+            return None
+
+    def get_all(self) -> List[UserModel]:
+        """Get all users."""
+        return self.session.query(UserModel).all()
+
+    def update(self, user: UserModel) -> None:
+        """Update a user."""
+        self.session.merge(user)
+        self.session.commit()
+
+    def delete(self, id: str) -> bool:
+        """Delete a user by ID."""
+        try:
+            user = self.get(id)
+            if user:
+                self.session.delete(user)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logging.error(f"Error deleting user: {e}")
+            return False
+
+    # Additional methods specific to UserRepository
+
+    def add_with_password(self, user: User, password: str) -> None:
         """Add a new user to the database with password."""
         user_model = UserModel(
             username=user.username,
@@ -26,8 +65,7 @@ class UserRepository(BaseRepository[User]):
             is_active=user.is_active,
             password_hash=generate_password_hash(password)
         )
-        self.session.add(user_model)
-        self.session.commit()
+        self.add(user_model)
 
     def get_by_id(self, user_id: int) -> Optional[UserModel]:
         """Get a user by ID."""
@@ -36,23 +74,6 @@ class UserRepository(BaseRepository[User]):
     def get_by_username(self, username: str) -> Optional[UserModel]:
         """Get a user by username."""
         return self.session.query(UserModel).filter_by(username=username).first()
-
-    def get_all(self) -> List[UserModel]:
-        """Get all users."""
-        return self.session.query(UserModel).all()
-
-    def update(self, user: UserModel) -> None:
-        """Update a user."""
-        self.session.commit()
-
-    def delete(self, user_id: int) -> bool:
-        """Delete a user."""
-        user = self.get_by_id(user_id)
-        if user:
-            self.session.delete(user)
-            self.session.commit()
-            return True
-        return False
 
     def verify_password(self, username: str, password: str) -> bool:
         """Verify user password."""
@@ -69,8 +90,4 @@ class UserRepository(BaseRepository[User]):
             user_model.password_hash = generate_password_hash(new_password)
             self.session.commit()
             return True
-        return False
-
-    def get(self, user_id: int) -> Optional[UserModel]:
-        """Get a user by ID (alias for get_by_id)."""
-        return self.get_by_id(user_id) 
+        return False 

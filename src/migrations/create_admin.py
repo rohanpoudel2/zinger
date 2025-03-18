@@ -35,12 +35,13 @@ def create_admin_user(username="admin", email="admin@example.com", password="adm
         )
         
         # Add user to database
-        user_repository.add(admin_user, password)
+        user_repository.add_with_password(admin_user, password)
         print(f"Admin user '{username}' created successfully.")
 
 if __name__ == "__main__":
-    # Get command line arguments
-    if len(sys.argv) > 3:
-        create_admin_user(sys.argv[1], sys.argv[2], sys.argv[3])
-    else:
-        create_admin_user() 
+    # Check for environment variables
+    username = os.getenv("USERNAME", "admin")
+    email = os.getenv("EMAIL", "admin@example.com")
+    password = os.getenv("PASSWORD", "admin123")
+    
+    create_admin_user(username, email, password) 

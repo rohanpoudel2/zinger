@@ -372,13 +372,17 @@ class Menu:
 
     def view_user_bookings(self):
         """Display user's bookings."""
-        if not self.current_user:
-            console.print("\n[red]Please login first[/red]")
-            self._pause()
-            return
-        
         try:
-            bookings = self.booking_service.get_user_bookings(self.current_user.id)
+            # Require authentication
+            try:
+                self.auth_service.require_auth()
+                user = self.auth_service.get_current_user()
+            except Exception as e:
+                console.print(f"\n[red]Authentication required:[/red] {str(e)}")
+                self._pause()
+                return
+                
+            bookings = self.booking_service.get_user_bookings(user.id)
             
             if not bookings:
                 console.print("\n[yellow]You have no bookings[/yellow]")
@@ -395,27 +399,27 @@ class Menu:
             table.add_column("Booking ID", justify="center")
             table.add_column("Bus", justify="left")
             table.add_column("Route", justify="left")
-            table.add_column("Seats", justify="center")
             table.add_column("Status", justify="center")
-            table.add_column("Departure", justify="center")
+            table.add_column("Booked On", justify="center")
             
             for booking in bookings:
                 bus = self.db_session.query(BusModel).get(booking.bus_id)
                 if bus:
-                    departure = booking.departure_time.strftime("%I:%M %p") if booking.departure_time else "N/A"
+                    booking_time = booking.booking_time.strftime("%Y-%m-%d %H:%M") if booking.booking_time else "N/A"
                     table.add_row(
                         str(booking.id),
                         bus.bus_number,
-                        bus.route,
-                        str(booking.seats),
+                        bus.route or "N/A",
                         booking.status,
-                        departure
+                        booking_time
                     )
             
             console.print(table)
             
         except Exception as e:
             console.print(f"\n[red]Error retrieving bookings:[/red] {str(e)}")
+            import traceback
+            console.print(traceback.format_exc())
         
         self._pause()
 
@@ -432,34 +436,29 @@ class Menu:
 
             table = Table(title="All Bookings")
             table.add_column("Booking ID", style="cyan")
-            table.add_column("User", style="magenta")
-            table.add_column("Bus Route", style="green")
-            table.add_column("Seat", style="blue")
-            table.add_column("Departure Time", style="yellow")
+            table.add_column("User ID", style="magenta")
+            table.add_column("Bus Number", style="green")
+            table.add_column("Passenger", style="blue")
+            table.add_column("Phone", style="blue")
             table.add_column("Status", style="red")
+            table.add_column("Booking Time", style="yellow")
 
             for booking in bookings:
-                # Get user and bus details
-                user = self.auth_service.get_user_by_id(booking.user_id)
-                bus = self.booking_service.bus_repository.get(booking.bus_number)
+                # Get bus details
+                bus = self.db_session.query(BusModel).get(booking.bus_id)
+                bus_number = bus.bus_number if bus else "N/A"
                 
-                # Use the helper method for departure time
-                departure_time = "Real-time"
-                if bus and hasattr(bus, 'get_departure_str'):
-                    departure_time = bus.get_departure_str()
-                elif bus and hasattr(bus, 'departure') and bus.departure is not None:
-                    try:
-                        departure_time = bus.departure.strftime("%I:%M %p")
-                    except:
-                        departure_time = "Real-time"
+                # Format booking time
+                booking_time = booking.booking_time.strftime("%Y-%m-%d %H:%M") if booking.booking_time else "N/A"
                 
                 table.add_row(
-                    str(booking.booking_id),
-                    user.username if user and hasattr(user, 'username') else "Unknown",
-                    bus.route if bus and hasattr(bus, 'route') else "Unknown",
-                    booking.seat,
-                    departure_time,
-                    booking.status.value if hasattr(booking, 'status') else "Unknown"
+                    str(booking.id),
+                    str(booking.user_id) if booking.user_id else "N/A",
+                    bus_number,
+                    booking.passenger_name,
+                    booking.phone_number,
+                    booking.status,
+                    booking_time
                 )
 
             console.print(table)
