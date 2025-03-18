@@ -14,6 +14,10 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# Get loggers
+app_logger = logging.getLogger('app')
+error_logger = logging.getLogger('error')
+
 class TransitService:
     def __init__(self, db_session: Session):
         self.db_session = db_session
@@ -39,30 +43,41 @@ class TransitService:
         # Load GTFS data if needed
         if not self._route_cache:
             self._load_gtfs_data()
+            
+        app_logger.info("TransitService initialized")
 
     def _load_cache(self, cache_file: str) -> dict:
         """Load cached data from file."""
+        app_logger.debug(f"Loading cache from {cache_file}")
         if os.path.exists(cache_file):
             cache_age = datetime.fromtimestamp(os.path.getmtime(cache_file))
             if datetime.now() - cache_age < timedelta(days=1):  # Cache is less than 1 day old
                 try:
                     with open(cache_file, 'rb') as f:
-                        return pickle.load(f)
+                        data = pickle.load(f)
+                        app_logger.info(f"Cache loaded successfully from {cache_file}")
+                        return data
                 except Exception as e:
-                    logging.error(f"Error loading cache {cache_file}: {e}")
+                    error_msg = f"Error loading cache {cache_file}: {str(e)}"
+                    error_logger.error(error_msg, exc_info=True)
+        app_logger.debug("No valid cache found")
         return {}
 
     def _save_cache(self, data: dict, cache_file: str) -> None:
         """Save data to cache file."""
         try:
+            app_logger.debug(f"Saving cache to {cache_file}")
             with open(cache_file, 'wb') as f:
                 pickle.dump(data, f)
+            app_logger.info(f"Cache saved successfully to {cache_file}")
         except Exception as e:
-            logging.error(f"Error saving cache {cache_file}: {e}")
+            error_msg = f"Error saving cache {cache_file}: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
 
     def _load_gtfs_data(self) -> None:
         """Load GTFS data and cache it locally."""
         try:
+            app_logger.info("Loading GTFS data")
             response = requests.get(self.GTFS_URL)
             response.raise_for_status()
             
@@ -92,23 +107,33 @@ class TransitService:
             # Save to cache
             self._route_cache = routes
             self._save_cache(routes, self.routes_cache_file)
+            app_logger.info(f"GTFS data loaded successfully with {len(routes)} routes")
             
         except Exception as e:
-            logging.error(f"Error loading GTFS data: {e}")
+            error_msg = f"Error loading GTFS data: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             if not self._route_cache:
                 self._route_cache = {}
 
     def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """Calculate distance between two points using Haversine formula."""
-        R = 6371  # Earth's radius in kilometers
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1-a))
-        distance_km = R * c
-        # Convert distance from km to miles
-        return distance_km * 0.621371
+        try:
+            app_logger.debug(f"Calculating distance between ({lat1}, {lon1}) and ({lat2}, {lon2})")
+            R = 6371  # Earth's radius in kilometers
+            lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1-a))
+            distance_km = R * c
+            # Convert distance from km to miles
+            miles = distance_km * 0.621371
+            app_logger.debug(f"Distance calculated: {miles:.2f} miles")
+            return miles
+        except Exception as e:
+            error_msg = f"Error calculating distance: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            return 0.0
 
     def _format_route_name(self, route_data) -> Optional[str]:
         """Format route name from either string or dictionary data. Returns None for invalid routes."""
@@ -139,10 +164,13 @@ class TransitService:
     def fetch_real_time_buses(self, user_location=None, radius_miles=3.0) -> List[Dict]:
         """Fetch real-time bus data for buses within radius of UNH."""
         try:
+            app_logger.info(f"Fetching real-time bus data within {radius_miles} miles")
+            
             # Always use UNH location
             user_lat, user_lon = self.UNH_LOCATION
             if user_location:
                 user_lat, user_lon = user_location
+                app_logger.debug(f"Using provided location: ({user_lat}, {user_lon})")
             
             # Convert radius from miles to kilometers for internal calculations
             radius_km = radius_miles / 0.621371
@@ -150,6 +178,8 @@ class TransitService:
             response = requests.get(self.vehicle_positions_url)
             response.raise_for_status()
             data = response.json()
+            
+            app_logger.debug("Successfully fetched vehicle positions data")
             
             # Create a list of valid route IDs that have proper descriptive names
             valid_route_ids = set()
@@ -212,10 +242,12 @@ class TransitService:
                 }
                 buses.append(bus)
             
+            app_logger.info(f"Found {len(buses)} buses within range")
             return sorted(buses, key=lambda x: x['distance_to_user'])
             
         except Exception as e:
-            logging.error(f"Error fetching real-time bus data: {e}")
+            error_msg = f"Error fetching real-time bus data: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             return []
 
     def _get_next_departure(self, timestamp: int) -> str:
@@ -249,6 +281,7 @@ class TransitService:
     def update_bus_database(self, user_location=None) -> None:
         """Update the database with the latest bus information."""
         try:
+            app_logger.info("Starting bus database update")
             buses = self.fetch_real_time_buses(user_location=user_location)
             
             # Use the update session if available, otherwise fall back to db_session
@@ -264,9 +297,14 @@ class TransitService:
                         route_type='local'  # Default to local, will be updated when GTFS data is loaded
                     )
                     session.add(route)
+                    app_logger.debug(f"Added new route: {route_id}")
             
             # Commit routes first
             session.commit()
+            app_logger.debug("Routes committed to database")
+            
+            updated_count = 0
+            new_count = 0
             
             # Now process buses
             for bus_data in buses:
@@ -289,7 +327,7 @@ class TransitService:
                         else:
                             timestamp = datetime.utcnow()
                     except Exception as e:
-                        print(f"Error creating timestamp: {e}, value: {bus_data['timestamp']}")
+                        error_logger.error(f"Error creating timestamp: {e}, value: {bus_data['timestamp']}")
                         timestamp = datetime.utcnow()
                     
                     if bus:
@@ -309,6 +347,7 @@ class TransitService:
                             bus.next_stop = bus_data['next_stop']
                         if 'current_location' in bus_data:
                             bus.current_location = bus_data['current_location']
+                        updated_count += 1
                     else:
                         # Create new bus with required fields
                         bus = BusModel(
@@ -331,13 +370,18 @@ class TransitService:
                             route_type=bus_data.get('route_type', 'local')
                         )
                         session.add(bus)
+                        new_count += 1
                 except Exception as e:
-                    print(f"Error processing bus {bus_data.get('bus_number', 'unknown')}: {e}")
+                    error_msg = f"Error processing bus {bus_data.get('bus_number', 'unknown')}: {str(e)}"
+                    error_logger.error(error_msg, exc_info=True)
                     continue
             
             session.commit()
+            app_logger.info(f"Bus database update completed. Updated: {updated_count}, New: {new_count}")
+            
         except Exception as e:
-            print(f"Error updating bus database: {e}")
+            error_msg = f"Error updating bus database: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             session = getattr(self, 'update_session', self.db_session)
             session.rollback()
 
@@ -457,6 +501,8 @@ class TransitService:
 
     def start_periodic_updates(self, location_service=None):
         """Start periodic updates of bus data."""
+        app_logger.info("Starting periodic bus updates")
+        
         # Create a separate database session for updates to avoid locking issues
         try:
             db_manager = DatabaseManager()
@@ -466,8 +512,10 @@ class TransitService:
             
             # Assign the new session
             self.update_session = update_session
+            app_logger.info("Created dedicated update session")
         except Exception as e:
-            print(f"Error creating update session: {e}")
+            error_msg = f"Error creating update session: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             self.update_session = self.db_session  # Fall back to original session
         
         while True:
@@ -487,11 +535,12 @@ class TransitService:
                     except Exception as e:
                         if "database is locked" in str(e).lower() and attempt < max_retries - 1:
                             # Database is locked, retry after a short delay
-                            print(f"Database locked, retrying update (attempt {attempt+1}/{max_retries})...")
+                            app_logger.warning(f"Database locked, retrying update (attempt {attempt+1}/{max_retries})...")
                             time.sleep(2)  # Wait before retry
                             continue
                         # Other error or last retry failed
-                        print(f"Error updating bus data (attempt {attempt+1}/{max_retries}): {e}")
+                        error_msg = f"Error updating bus data (attempt {attempt+1}/{max_retries}): {str(e)}"
+                        error_logger.error(error_msg, exc_info=True)
                         if hasattr(self, 'update_session'):
                             self.update_session.rollback()
                         break
@@ -500,6 +549,7 @@ class TransitService:
                 time.sleep(15)
                 
             except Exception as e:
-                print(f"Error in periodic update: {e}")
+                error_msg = f"Error in periodic update: {str(e)}"
+                error_logger.error(error_msg, exc_info=True)
                 # Wait a bit before retrying on error
                 time.sleep(5) 

@@ -12,9 +12,16 @@ from rich.traceback import install
 import os
 import threading
 import time
+from config.logging_config import setup_logging
+import logging
 
 install(show_locals=False)
 console = Console()
+
+# Get loggers
+app_logger = logging.getLogger('app')
+error_logger = logging.getLogger('error')
+access_logger = logging.getLogger('access')
 
 def clear_screen():
     """Clear the terminal screen."""
@@ -24,6 +31,7 @@ def handle_interrupt(signum, frame):
     """Handle interrupt signal (Ctrl+C)."""
     clear_screen()
     console.print("\n[yellow]Shutting down...[/yellow]")
+    access_logger.info("Application shutdown by interrupt signal")
     os._exit(0)
 
 def update_bus_data(db_manager: DatabaseManager):
@@ -35,23 +43,34 @@ def update_bus_data(db_manager: DatabaseManager):
                 transit_service.update_bus_database()
                 time.sleep(30)
             except Exception as e:
+                error_msg = f"Error updating bus data: {str(e)}"
+                error_logger.error(error_msg, exc_info=True)
                 console.print(f"\n[red]Error updating bus data:[/red] {str(e)}")
 
 def main():
-    """Main entry point of the application."""
+    # Setup logging
+    setup_logging()
+    
+    app_logger.info("Application starting...")
+    access_logger.info("Application initialization begun")
+
     try:
         # Initialize services and repositories
         db_manager = DatabaseManager()
+        app_logger.info("Database manager initialized")
         
         # Create tables if they don't exist
         db_manager.create_tables()
+        app_logger.info("Database tables created/verified")
         
         # Initialize location service first
         location_service = LocationService()
+        app_logger.info("Location service initialized")
         
         # Create a session for TransitService (will be used in background thread)
         transit_session = db_manager.Session()
         transit_service = TransitService(transit_session)
+        app_logger.info("Transit service initialized")
         
         # Start the background update thread
         update_thread = threading.Thread(
@@ -60,6 +79,7 @@ def main():
             daemon=True
         )
         update_thread.start()
+        app_logger.info("Background update thread started")
         
         # Use a context manager for the main session
         with db_manager.get_session() as session:
@@ -74,6 +94,8 @@ def main():
             )
             auth_service = AuthService(user_repository)
             
+            app_logger.info("All services and repositories initialized")
+            
             # Initialize and start the menu
             menu = Menu(
                 booking_service=booking_service,
@@ -81,17 +103,19 @@ def main():
                 location_service=location_service,
                 db_session=session
             )
+            app_logger.info("Menu initialized, starting application interface")
             menu.start()
             
     except Exception as e:
+        error_msg = f"Critical application error: {str(e)}"
+        error_logger.critical(error_msg, exc_info=True)
         print(f"Application error: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
     finally:
         if 'transit_session' in locals():
             transit_session.close()
         if 'db_manager' in locals():
             db_manager.close()
+        app_logger.info("Application shutdown complete")
 
 if __name__ == "__main__":
     main()

@@ -6,35 +6,53 @@ from repositories.user_repository import UserRepository
 from exceptions import BookingError, ValidationError, BusError, UserError
 import logging
 
+# Get loggers
+app_logger = logging.getLogger('app')
+error_logger = logging.getLogger('error')
+access_logger = logging.getLogger('access')
+
 class BookingService:
     def __init__(self, booking_repo: BookingRepository, bus_repo: BusRepository, user_repo: UserRepository):
         self.booking_repo = booking_repo
         self.bus_repo = bus_repo
         self.user_repo = user_repo
+        app_logger.info("BookingService initialized")
 
     def get_available_buses(self) -> List:
         """Get all available buses."""
-        return [bus for bus in self.bus_repo.get_all() if bus.is_active]
+        app_logger.info("Fetching available buses")
+        buses = [bus for bus in self.bus_repo.get_all() if bus.is_active]
+        app_logger.info(f"Found {len(buses)} available buses")
+        return buses
 
     def get_route_info(self, route: str) -> Dict:
         """Get detailed information about a specific route."""
+        app_logger.info(f"Fetching route info for route: {route}")
         # Return empty dict - we'll use real-time data from the API instead of static data
         return {}
 
     def create_booking(self, user_id: int, bus_id: int, seats: int) -> BookingModel:
         """Create a new booking."""
         try:
+            app_logger.info(f"Creating booking for user {user_id} on bus {bus_id} for {seats} seats")
+            
             # Verify user exists
             user = self.user_repo.get_by_id(user_id)
             if not user:
-                raise UserError("User not found")
+                error_msg = f"User {user_id} not found"
+                error_logger.error(error_msg)
+                raise UserError(error_msg)
 
             # Verify bus exists and is active
             bus = self.bus_repo.get_by_id(bus_id)
             if not bus:
-                raise BusError("Bus not found")
+                error_msg = f"Bus {bus_id} not found"
+                error_logger.error(error_msg)
+                raise BusError(error_msg)
             if not bus.is_active:
-                raise BusError("Bus is not active")
+                error_msg = f"Bus {bus_id} is not active"
+                error_logger.error(error_msg)
+                raise BusError(error_msg)
 
             # Create booking
             booking = self.booking_repo.create_booking(
@@ -43,87 +61,137 @@ class BookingService:
                 seats=seats,
                 departure_time=bus.last_updated
             )
-
+            
+            app_logger.info(f"Successfully created booking {booking.id} for user {user_id}")
+            access_logger.info(f"New booking created - ID: {booking.id}, User: {user_id}, Bus: {bus_id}")
             return booking
 
         except (UserError, BusError, BookingError) as e:
+            error_logger.error(f"Booking creation failed: {str(e)}")
             raise e
         except Exception as e:
-            raise BookingError(f"Failed to create booking: {str(e)}")
+            error_msg = f"Failed to create booking: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            raise BookingError(error_msg)
 
     def get_booking(self, booking_id: int) -> Optional[BookingModel]:
         """Get a booking by ID."""
-        return self.booking_repo.get_booking(booking_id)
+        app_logger.info(f"Fetching booking {booking_id}")
+        booking = self.booking_repo.get_booking(booking_id)
+        if booking:
+            app_logger.info(f"Found booking {booking_id}")
+        else:
+            app_logger.warning(f"Booking {booking_id} not found")
+        return booking
 
     def get_all_bookings(self) -> List[BookingModel]:
         """Get all bookings."""
-        return self.booking_repo.get_all()
+        app_logger.info("Fetching all bookings")
+        bookings = self.booking_repo.get_all()
+        app_logger.info(f"Found {len(bookings)} bookings")
+        return bookings
 
     def get_user_bookings(self, user_id: int) -> List[BookingModel]:
         """Get all bookings for a user."""
-        return self.booking_repo.get_user_bookings(user_id)
+        app_logger.info(f"Fetching bookings for user {user_id}")
+        bookings = self.booking_repo.get_user_bookings(user_id)
+        app_logger.info(f"Found {len(bookings)} bookings for user {user_id}")
+        return bookings
 
     def get_bus_bookings(self, bus_id: int) -> List[BookingModel]:
         """Get all bookings for a bus."""
-        return self.booking_repo.get_bus_bookings(bus_id)
+        app_logger.info(f"Fetching bookings for bus {bus_id}")
+        bookings = self.booking_repo.get_bus_bookings(bus_id)
+        app_logger.info(f"Found {len(bookings)} bookings for bus {bus_id}")
+        return bookings
 
     def cancel_booking(self, booking_id: int) -> bool:
         """Cancel a booking."""
         try:
+            app_logger.info(f"Attempting to cancel booking {booking_id}")
             booking = self.booking_repo.get_booking(booking_id)
             if not booking:
-                raise BookingError("Booking not found")
+                error_msg = f"Booking {booking_id} not found"
+                error_logger.error(error_msg)
+                raise BookingError(error_msg)
 
             if booking.status == "cancelled":
-                raise BookingError("Booking is already cancelled")
+                error_msg = f"Booking {booking_id} is already cancelled"
+                error_logger.error(error_msg)
+                raise BookingError(error_msg)
 
             # Cancel the booking
-            return self.booking_repo.cancel_booking(booking_id)
+            result = self.booking_repo.cancel_booking(booking_id)
+            if result:
+                app_logger.info(f"Successfully cancelled booking {booking_id}")
+                access_logger.info(f"Booking {booking_id} cancelled")
+            else:
+                app_logger.warning(f"Failed to cancel booking {booking_id}")
+            return result
 
         except (BookingError, BusError) as e:
+            error_logger.error(f"Booking cancellation failed: {str(e)}")
             raise e
         except Exception as e:
-            raise BookingError(f"Failed to cancel booking: {str(e)}")
+            error_msg = f"Failed to cancel booking: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            raise BookingError(error_msg)
 
     def get_active_bookings(self) -> List[BookingModel]:
         """Get all active bookings."""
-        return self.booking_repo.get_active_bookings()
+        app_logger.info("Fetching active bookings")
+        bookings = self.booking_repo.get_active_bookings()
+        app_logger.info(f"Found {len(bookings)} active bookings")
+        return bookings
 
     def book_seat(self, bus_number, passenger_name, phone_number, auth_service=None):
         """Book a seat on a bus."""
         try:
+            app_logger.info(f"Attempting to book seat on bus {bus_number} for {passenger_name}")
+            
             # Get the bus
             bus = self.bus_repo.get_by_bus_number(bus_number)
             if not bus:
-                raise ValidationError(f"Bus with number {bus_number} not found")
+                error_msg = f"Bus with number {bus_number} not found"
+                error_logger.error(error_msg)
+                raise ValidationError(error_msg)
             
             # Check if bus is active
             if not bus.is_active:
-                raise ValidationError(f"Bus {bus_number} is not currently active")
+                error_msg = f"Bus {bus_number} is not currently active"
+                error_logger.error(error_msg)
+                raise ValidationError(error_msg)
             
             # Get current user ID if available
             user_id = None
             if auth_service and auth_service.is_authenticated():
                 user = auth_service.get_current_user()
                 user_id = user.id
-                logging.info(f"Booking with authenticated user_id: {user_id}")
+                app_logger.info(f"Booking with authenticated user_id: {user_id}")
             else:
-                logging.warning("No auth_service provided or user not authenticated")
+                app_logger.warning("No auth_service provided or user not authenticated")
             
-            # Create a new booking using book_seat method with user_id
-            return self.booking_repo.book_seat(
+            # Create a new booking
+            booking = self.booking_repo.book_seat(
                 bus_id=bus.id,
                 passenger_name=passenger_name,
                 phone_number=phone_number,
                 user_id=user_id
             )
+            
+            app_logger.info(f"Successfully booked seat on bus {bus_number} for {passenger_name}")
+            access_logger.info(f"New seat booking - Bus: {bus_number}, Passenger: {passenger_name}, User ID: {user_id}")
+            return booking
+            
         except Exception as e:
-            logging.error(f"Error booking seat: {e}")
-            raise ValidationError(f"Failed to book seat: {e}")
+            error_msg = f"Failed to book seat: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            raise ValidationError(error_msg)
 
     def export_bookings_to_csv(self, filepath: str) -> bool:
         """Export all bookings to a CSV file."""
         try:
+            app_logger.info(f"Exporting all bookings to CSV: {filepath}")
             import csv
             import os
             from datetime import datetime
@@ -161,14 +229,17 @@ class BookingService:
                         'Route': route
                     })
             
+            app_logger.info(f"Successfully exported {len(bookings)} bookings to {filepath}")
             return True
         except Exception as e:
-            logging.error(f"Error exporting bookings to CSV: {e}")
+            error_msg = f"Error exporting bookings to CSV: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             return False
             
     def export_user_bookings_to_csv(self, user_id: int, filepath: str) -> bool:
         """Export bookings for a specific user to a CSV file."""
         try:
+            app_logger.info(f"Exporting bookings for user {user_id} to CSV: {filepath}")
             import csv
             import os
             from datetime import datetime
@@ -206,7 +277,9 @@ class BookingService:
                         'Route': route
                     })
             
+            app_logger.info(f"Successfully exported {len(bookings)} bookings for user {user_id} to {filepath}")
             return True
         except Exception as e:
-            logging.error(f"Error exporting user bookings to CSV: {e}")
+            error_msg = f"Error exporting user bookings to CSV: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             return False 

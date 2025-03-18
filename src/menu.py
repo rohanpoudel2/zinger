@@ -13,8 +13,14 @@ import os
 import signal
 import sys
 from datetime import datetime
+import logging
 
 console = Console()
+
+# Get loggers
+auth_logger = logging.getLogger('auth')
+error_logger = logging.getLogger('error')
+access_logger = logging.getLogger('access')
 
 def clear_screen():
     """Clear the terminal screen."""
@@ -34,25 +40,29 @@ class Menu:
         self.db_session = db_session
         self.current_user = None
         signal.signal(signal.SIGINT, self._handle_interrupt)
+        access_logger.info("Menu system initialized")
 
     def _handle_interrupt(self, signum, frame):
         """Handle Ctrl+C interrupt."""
         clear_screen()
         console.print("\n[yellow]Shutting down...[/yellow]")
+        access_logger.info("Application shutdown initiated by user interrupt")
         sys.exit(0)
 
     def start(self):
         """Start the menu system."""
         clear_screen()
         try:
+            access_logger.info("Menu system started")
             self.display_main_menu()
         except KeyboardInterrupt:
             clear_screen()
             console.print("\n[yellow]Shutting down...[/yellow]")
+            access_logger.info("Application shutdown by keyboard interrupt")
         except Exception as e:
+            error_msg = f"Unexpected error in menu system: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
             console.print(f"\n[red]An error occurred:[/red] {str(e)}")
-            import traceback
-            console.print(traceback.format_exc())
 
     def display_main_menu(self) -> None:
         """Display the main menu options."""
@@ -63,7 +73,7 @@ class Menu:
                 location_info = ""
                 if self.location_service.get_location_name():
                     location_info = f" - Location: [yellow]{self.location_service.get_location_name()}[/yellow]"
-                console.print(Panel(f"[blue]Bus Booking System[/blue] - Logged in as [green]{user.username}[/green] ({user.role}){location_info}"))
+                console.print(Panel(f"[blue]Bus Booking System[/blue] - Logged in as [green]{user.username}[/green] ({str(user.role).split('.')[-1]}){location_info}"))
                 self._display_authenticated_menu()
             else:
                 location_info = ""
@@ -159,15 +169,22 @@ class Menu:
         password = Prompt.ask("Password", password=True)
         
         try:
+            auth_logger.info(f"Login attempt for user: {username}")
             user = self.auth_service.login(username, password)
             if user:
                 self.current_user = user
+                auth_logger.info(f"Login successful for user: {username} (ID: {user.id})")
+                access_logger.info(f"User {username} (ID: {user.id}) logged in")
                 console.print("\n[green]Login successful![/green]")
                 self._pause()
             else:
+                auth_logger.warning(f"Failed login attempt for user: {username}")
                 console.print("\n[red]Invalid username or password[/red]")
                 self._pause()
         except Exception as e:
+            error_msg = f"Login error for user {username}: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            auth_logger.error(f"Login failed for user {username}: {str(e)}")
             console.print(f"\n[red]Login failed:[/red] {str(e)}")
             self._pause()
 
@@ -180,18 +197,25 @@ class Menu:
         confirm_password = Prompt.ask("Confirm Password", password=True)
         
         if password != confirm_password:
+            auth_logger.warning(f"Registration failed for user {username}: Passwords do not match")
             console.print("\n[red]Passwords do not match[/red]")
             self._pause()
             return
         
         try:
+            auth_logger.info(f"Registration attempt for user: {username}")
             user = self.auth_service.register(username, password)
             if user:
+                auth_logger.info(f"Registration successful for user: {username} (ID: {user.id})")
                 console.print("\n[green]Registration successful! Please login.[/green]")
             else:
+                auth_logger.warning(f"Registration failed for user: {username}")
                 console.print("\n[red]Registration failed[/red]")
             self._pause()
         except Exception as e:
+            error_msg = f"Registration error for user {username}: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            auth_logger.error(f"Registration failed for user {username}: {str(e)}")
             console.print(f"\n[red]Registration failed:[/red] {str(e)}")
             self._pause()
 
