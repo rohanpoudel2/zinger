@@ -10,7 +10,6 @@ from menu import Menu
 from rich.console import Console
 from rich.traceback import install
 import os
-import signal
 import threading
 import time
 

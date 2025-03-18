@@ -1,7 +1,7 @@
 from typing import Optional, List
-from sqlalchemy import select, and_
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
-from models.database_models import BookingModel, BookingStatus
+from models.database_models import BookingModel
 from .base_repository import BaseRepository
 from exceptions import BookingError
 from datetime import datetime

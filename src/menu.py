@@ -1,9 +1,8 @@
-from typing import Optional
 from services.booking_service import BookingService
 from services.auth_service import AuthService
 from services.location_service import LocationService
 from models.database_models import UserRole, BusModel
-from exceptions import ValidationError, BookingError, SeatError
+from exceptions import ValidationError
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel

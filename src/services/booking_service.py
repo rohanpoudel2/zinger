@@ -1,10 +1,9 @@
 from typing import List, Optional, Dict
-from models.database_models import BookingModel, BookingStatus, BusModel
+from models.database_models import BookingModel
 from repositories.booking_repository import BookingRepository
 from repositories.bus_repository import BusRepository
 from repositories.user_repository import UserRepository
 from exceptions import BookingError, ValidationError, BusError, UserError
-from datetime import datetime
 import logging
 
 class BookingService:

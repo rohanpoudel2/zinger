@@ -2,7 +2,6 @@ from sqlalchemy import create_engine, event, Engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 from utils.base import Base
-from models.database_models import UserModel, BusModel, RouteModel, BookingModel
 from exceptions import DatabaseError
 from contextlib import contextmanager
 from typing import Generator

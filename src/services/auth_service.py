@@ -2,7 +2,7 @@ from typing import Optional
 from repositories.user_repository import UserRepository, User
 from models.database_models import UserRole, UserModel
 from exceptions import ValidationError, AuthenticationError
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 import hashlib
 import os
 

@@ -1,15 +1,12 @@
 import requests
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional
 from models.database_models import BusModel, RouteModel
-from repositories.bus_repository import BusRepository
 from utils.database_manager import DatabaseManager
-import json
 import time
 import os
 import zipfile
 import io
-import random
 from sqlalchemy.orm import Session
 from math import radians, sin, cos, sqrt, atan2
 import pickle
