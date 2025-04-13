@@ -16,13 +16,14 @@ class DatabaseManager:
         self.engine = create_engine(database_url)
         self.Session = sessionmaker(bind=self.engine)
         
-    def create_tables(self):
-        """Create all database tables."""
+    def initialize_database(self) -> None:
+        """Initialize the database by creating tables if they don't exist."""
         try:
+            # Create tables without dropping existing ones
             Base.metadata.create_all(self.engine)
-            console.print("[green]Database tables created successfully.[/green]")
+            console.print("[green]Database initialized successfully.[/green]")
         except SQLAlchemyError as e:
-            raise DatabaseError(f"Failed to create database tables: {str(e)}")
+            raise DatabaseError(f"Failed to initialize database: {str(e)}")
 
     @contextmanager
     def get_session(self) -> Generator[Session, None, None]:
@@ -39,15 +40,6 @@ class DatabaseManager:
             raise DatabaseError(f"Unexpected error during database operation: {str(e)}")
         finally:
             session.close()
-
-    def initialize_database(self) -> None:
-        """Initialize the database by creating tables if they don't exist."""
-        try:
-            # Create tables without dropping existing ones
-            Base.metadata.create_all(self.engine)
-            console.print("[green]Database initialized successfully.[/green]")
-        except SQLAlchemyError as e:
-            raise DatabaseError(f"Failed to initialize database: {str(e)}")
 
     def close(self) -> None:
         """Close database connections."""

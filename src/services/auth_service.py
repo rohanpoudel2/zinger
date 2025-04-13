@@ -2,16 +2,17 @@ from typing import Optional
 from repositories.user_repository import UserRepository, User
 from models.database_models import UserRole, UserModel
 from exceptions import ValidationError, AuthenticationError
-from werkzeug.security import check_password_hash
+from utils.auth_utils import verify_password
 import hashlib
 import os
+from views.context.app_context import AppContext
 
 class AuthService:
     def __init__(self, user_repository: UserRepository):
         self.user_repository = user_repository
-        self.current_user = None
+        self.context = AppContext()
 
-    def register(self, username: str, password: str) -> Optional[UserModel]:
+    def register(self, username: str, email: str, password: str) -> Optional[UserModel]:
         """Register a new user."""
         try:
             # Check if username already exists
@@ -23,7 +24,7 @@ class AuthService:
             user = User(
                 id=0,  # Will be set by database
                 username=username,
-                email=f"{username}@example.com",  # Default email
+                email=email,  # Use the provided email
                 role=UserRole.PASSENGER,
                 is_active=True
             )
@@ -33,47 +34,41 @@ class AuthService:
         except Exception as e:
             raise ValidationError(f"Registration failed: {str(e)}")
 
-    def _hash_password(self, password: str) -> str:
-        """Hash a password for storing."""
-        salt = os.urandom(32)  # 32 bytes = 256 bits
-        key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-        return salt.hex() + ':' + key.hex()
-
-    def _verify_password(self, stored_password: str, provided_password: str) -> bool:
-        """Verify a stored password against one provided by user."""
-        salt_hex, key_hex = stored_password.split(':')
-        salt = bytes.fromhex(salt_hex)
-        key = hashlib.pbkdf2_hmac('sha256', provided_password.encode('utf-8'), salt, 100000)
-        return key.hex() == key_hex
-
     def login(self, username: str, password: str) -> Optional[UserModel]:
-        """Authenticate a user."""
+        """Authenticate a user and update AuthStore."""
         user = self.user_repository.get_by_username(username)
         if not user:
             return None
             
-        if check_password_hash(user.password_hash, password):
-            self.current_user = user
+        if verify_password(user.password_hash, password):
+            # Update AuthStore on successful login
+            auth_store = self.context.get_store('auth')
+            if auth_store:
+                auth_store.update({'current_user': user, 'is_authenticated': True})
             return user
         return None
 
     def logout(self) -> None:
-        """Log out the current user."""
-        self.current_user = None
+        """Log out the current user by updating AuthStore."""
+        auth_store = self.context.get_store('auth')
+        if auth_store:
+            auth_store.update({'current_user': None, 'is_authenticated': False})
 
     def get_current_user(self) -> Optional[UserModel]:
-        """Get the currently logged in user."""
-        return self.current_user
+        """Get the currently logged in user from AuthStore."""
+        auth_store = self.context.get_store('auth')
+        return auth_store.get_state().get('current_user') if auth_store else None
 
     def require_auth(self) -> None:
-        """Require that a user is authenticated."""
-        if not self.current_user:
+        """Require that a user is authenticated based on AuthStore."""
+        if not self.is_authenticated():
             raise AuthenticationError("Authentication required")
 
     def require_role(self, role: str) -> None:
         """Require that the current user has a specific role."""
         self.require_auth()
-        if self.current_user.role != role:
+        current_user = self.get_current_user()
+        if not current_user or current_user.role != role:
             raise AuthenticationError(f"Role {role} required")
 
     def get_user_by_id(self, user_id: int) -> Optional[UserModel]:
@@ -95,5 +90,6 @@ class AuthService:
         return self.user_repository.delete(user_id)
 
     def is_authenticated(self) -> bool:
-        """Check if a user is currently authenticated."""
-        return self.current_user is not None 
+        """Check if a user is currently authenticated based on AuthStore."""
+        auth_store = self.context.get_store('auth')
+        return auth_store.get_state().get('is_authenticated', False) if auth_store else False 

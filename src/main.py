@@ -6,6 +6,8 @@ from repositories.user_repository import UserRepository
 from repositories.booking_repository import BookingRepository
 from repositories.bus_repository import BusRepository
 from utils.database_manager import DatabaseManager
+from utils.base import clear_screen, setup_interrupt_handler
+from utils.logger import get_app_logger, get_error_logger, get_access_logger
 from menu import Menu
 from rich.console import Console
 from rich.traceback import install
@@ -19,20 +21,9 @@ install(show_locals=False)
 console = Console()
 
 # Get loggers
-app_logger = logging.getLogger('app')
-error_logger = logging.getLogger('error')
-access_logger = logging.getLogger('access')
-
-def clear_screen():
-    """Clear the terminal screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def handle_interrupt(signum, frame):
-    """Handle interrupt signal (Ctrl+C)."""
-    clear_screen()
-    console.print("\n[yellow]Shutting down...[/yellow]")
-    access_logger.info("Application shutdown by interrupt signal")
-    os._exit(0)
+app_logger = get_app_logger()
+error_logger = get_error_logger()
+access_logger = get_access_logger()
 
 def update_bus_data(db_manager: DatabaseManager):
     """Update bus data periodically in a separate thread with its own session."""
@@ -51,6 +42,9 @@ def main():
     # Setup logging
     setup_logging()
     
+    # Setup interrupt handler
+    setup_interrupt_handler(console)
+    
     app_logger.info("Application starting...")
     access_logger.info("Application initialization begun")
 
@@ -59,9 +53,9 @@ def main():
         db_manager = DatabaseManager()
         app_logger.info("Database manager initialized")
         
-        # Create tables if they don't exist
-        db_manager.create_tables()
-        app_logger.info("Database tables created/verified")
+        # Initialize database (creates tables if needed)
+        db_manager.initialize_database()
+        app_logger.info("Database initialized")
         
         # Initialize location service first
         location_service = LocationService()

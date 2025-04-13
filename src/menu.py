@@ -14,18 +14,16 @@ import signal
 import sys
 from datetime import datetime
 import logging
+from utils.base import clear_screen, setup_interrupt_handler
+from utils.logger import get_app_logger, get_error_logger, get_access_logger, get_auth_logger
 
 console = Console()
 
 # Get loggers
-app_logger = logging.getLogger('app')
-auth_logger = logging.getLogger('auth')
-error_logger = logging.getLogger('error')
-access_logger = logging.getLogger('access')
-
-def clear_screen():
-    """Clear the terminal screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
+app_logger = get_app_logger()
+auth_logger = get_auth_logger()
+error_logger = get_error_logger()
+access_logger = get_access_logger()
 
 class Menu:
     def __init__(
@@ -40,17 +38,9 @@ class Menu:
         self.location_service = location_service
         self.db_session = db_session
         self.current_user = None
-        signal.signal(signal.SIGINT, self._handle_interrupt)
+        setup_interrupt_handler(console)
         app_logger.info("Menu system initialized with all services")
         access_logger.info("Menu system initialized")
-
-    def _handle_interrupt(self, signum, frame):
-        """Handle Ctrl+C interrupt."""
-        clear_screen()
-        console.print("\n[yellow]Shutting down...[/yellow]")
-        access_logger.info("Application shutdown initiated by user interrupt")
-        app_logger.info("Application terminated by user interrupt")
-        sys.exit(0)
 
     def start(self):
         """Start the menu system."""
