@@ -102,12 +102,31 @@ class DashboardPage(AuthenticatedPage): # Inherit from AuthenticatedPage
         actions_card_content = tk.Frame(actions_card.main_area, bg=PALETTE["card_bg"])
         actions_card_content.pack(fill=tk.BOTH, expand=True)
 
-        # Add action buttons (using tk.Button styled for Material)
+        # Add action buttons (using ttk.Button styled for Material)
         btn_frame = tk.Frame(actions_card_content, bg=PALETTE["card_bg"])
-        btn_frame.pack(pady=10)
+        btn_frame.pack(pady=10, fill=tk.X, expand=True)
         
-        # Add a placeholder if no actions are available yet
-        tk.Label(btn_frame, text="(More actions coming soon...)", font=FONTS["caption"], fg=PALETTE["text_secondary"], bg=PALETTE["card_bg"]).pack()
+        # Configure columns for button spacing
+        btn_frame.columnconfigure(0, weight=1)
+        btn_frame.columnconfigure(1, weight=1)
+
+        # Book New Ticket Button
+        book_button = ttk.Button(
+            btn_frame, 
+            text="BOOK NEW TICKET", 
+            style='Primary.TButton',
+            command=self._navigate_to_new_booking # Placeholder command
+        )
+        book_button.grid(row=0, column=0, padx=10, pady=5, sticky='ew')
+
+        # Search Buses Button
+        search_button = ttk.Button(
+            btn_frame,
+            text="SEARCH BUSES", 
+            style='Accent.TButton', 
+            command=self._navigate_to_buses # Placeholder command
+        )
+        search_button.grid(row=0, column=1, padx=10, pady=5, sticky='ew')
 
     def _load_data(self) -> None:
         """Load user bookings and other data, then update UI."""
@@ -153,19 +172,21 @@ class DashboardPage(AuthenticatedPage): # Inherit from AuthenticatedPage
         self._clear_frame(self.user_card_content)
 
         if not self.current_user:
-             tk.Label(self.user_card_content, text="Error: User data not available.", font=FONTS["body"], fg=PALETTE["danger"], bg=PALETTE["card_bg"]).pack(pady=20)
+             tk.Label(self.user_card_content, text="Error: User data not available.", font=FONTS["body"], fg=PALETTE["danger"], bg=PALETTE["card_bg"]).pack(pady=20, anchor='w')
              return
 
-        # Helper to create label rows
-        def create_info_row(parent, label_text, value_text):
-            row_frame = tk.Frame(parent, bg=PALETTE["card_bg"])
-            row_frame.pack(fill=tk.X, pady=2)
-            tk.Label(row_frame, text=label_text, font=FONTS["body_bold"], bg=PALETTE["card_bg"], width=12, anchor='w').pack(side=tk.LEFT)
-            tk.Label(row_frame, text=value_text, font=FONTS["body"], bg=PALETTE["card_bg"], anchor='w', wraplength=250).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Use getattr for safer access
+        username = getattr(self.current_user, 'username', 'N/A')
+        email = getattr(self.current_user, 'email', 'N/A')
+        role_enum = getattr(self.current_user, 'role', None)
+        role_str = str(role_enum).split('.')[-1].capitalize() if role_enum else 'N/A'
+        booking_count = str(len(self._bookings)) if self._bookings is not None else "0"
 
-        create_info_row(self.user_card_content, "Username:", self.current_user.username)
-        create_info_row(self.user_card_content, "Email:", self.current_user.email)
-        create_info_row(self.user_card_content, "Role:", str(self.current_user.role).split('.')[-1].capitalize()) 
+        # Pack labels directly into user_card_content
+        tk.Label(self.user_card_content, text=f"Username: {username}", font=FONTS["body"], bg=PALETTE["card_bg"], anchor='w').pack(fill=tk.X, pady=2)
+        tk.Label(self.user_card_content, text=f"Email: {email}", font=FONTS["body"], bg=PALETTE["card_bg"], anchor='w').pack(fill=tk.X, pady=2)
+        tk.Label(self.user_card_content, text=f"Role: {role_str}", font=FONTS["body"], bg=PALETTE["card_bg"], anchor='w').pack(fill=tk.X, pady=2)
+        tk.Label(self.user_card_content, text=f"Total Bookings: {booking_count}", font=FONTS["body"], bg=PALETTE["card_bg"], anchor='w').pack(fill=tk.X, pady=2)
 
     def _render_bookings_card(self) -> None:
         """Render the bookings summary card content."""
@@ -202,15 +223,25 @@ class DashboardPage(AuthenticatedPage): # Inherit from AuthenticatedPage
             for booking in self._bookings[:5]: # Limit to 5 for summary view
                 date_str = booking.booking_time.strftime('%Y-%m-%d') if booking.booking_time else 'N/A'
                 bus_route = f"Route {booking.bus.route}" if booking.bus else 'N/A'
+                seat_count_display = getattr(booking, 'seat_count', 1) # Default to 1 if missing
                 tree.insert('', tk.END, values=(
                     booking.id,
                     bus_route,
-                    booking.seat_count,
+                    seat_count_display, # Use the safe value
                     date_str,
                     booking.status.capitalize()
                 ))
             
             tree.pack(fill=tk.BOTH, expand=True)
+            
+            # Add "View All" button below the tree
+            view_all_btn = ttk.Button(
+                self.bookings_card_content, 
+                text="View All Bookings", 
+                style='Primary.TButton', 
+                command=self._navigate_to_bookings # Placeholder command
+            )
+            view_all_btn.pack(pady=(10,0)) # Add some padding above the button
             
             # Style the Treeview
             style = ttk.Style()
@@ -231,11 +262,16 @@ class DashboardPage(AuthenticatedPage): # Inherit from AuthenticatedPage
         else:
             print("Error: App instance not found or doesn't support navigation.")
 
-    def _navigate_to_booking(self) -> None:
+    def _navigate_to_new_booking(self) -> None:
         if self.app and hasattr(self.app, 'show_page'):
             self.app.show_page('new_booking') # Assuming a 'new_booking' page exists
         else:
             print("Error: App instance not found or doesn't support navigation.")
+
+    # Page Lifecycle Method
+    def reset_state(self) -> None:
+        """Reload data when the page is shown."""
+        self._load_data()
 
     # Removed: init, render, component_did_mount, set_state, get_state
     # Logic moved to __init__, _create_page_widgets, _load_data, _render_ui_states

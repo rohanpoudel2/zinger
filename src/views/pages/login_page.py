@@ -160,6 +160,7 @@ class LoginPage(tk.Frame):
                 if hasattr(self, 'login_button') and self.login_button:
                     self.login_button.config(state=tk.NORMAL) # Re-enable ttk.Button (text is fixed)
                 self._show_error("Invalid username or password") # Show error after potential re-enable
+                self.login_button.config(state=tk.NORMAL, text="LOGIN")
                 # Button text update handled separately or not needed if error shown
         except Exception as e:
             if hasattr(self, 'login_button') and self.login_button:

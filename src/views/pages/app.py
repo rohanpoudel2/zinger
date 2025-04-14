@@ -7,7 +7,15 @@ from views.context.app_context import AppContext, Observer
 from views.pages.login_page import LoginPage
 from views.pages.dashboard_page import DashboardPage
 from views.pages.register_page import RegisterPage
+from views.pages.bus_list_page import BusListPage
+from views.pages.new_booking_page import NewBookingPage
+from views.pages.bookings_page import BookingsPage
+from views.pages.admin_dashboard_page import AdminDashboardPage # Import admin page
+from views.pages.admin_all_bookings_page import AdminAllBookingsPage # Import admin bookings page
+from views.pages.admin_manage_users_page import AdminManageUsersPage # Import admin users page
+from views.pages.admin_export_page import AdminExportPage # Import admin export page
 from views.config.theme import PALETTE, FONTS # Import from theme config
+from models.database_models import UserRole # Import UserRole
 
 # This will be imported later when the pages are created
 # from views.pages.login_page import LoginPage
@@ -67,7 +75,13 @@ class App(tk.Tk, Observer):
             'login': LoginPage,
             'register': RegisterPage,
             'dashboard': DashboardPage,
-            # 'buses': BusListPage,
+            'buses': BusListPage,
+            'new_booking': NewBookingPage,
+            'bookings': BookingsPage,
+            'admin': AdminDashboardPage, # Add admin route
+            'admin_all_bookings': AdminAllBookingsPage, # Add admin bookings route
+            'admin_manage_users': AdminManageUsersPage, # Add admin users route
+            'admin_export_bookings': AdminExportPage, # Add admin export route
             # 'booking': BookingPage,
         }
         
@@ -201,6 +215,8 @@ class App(tk.Tk, Observer):
             
         is_authenticated = self.context.get_store('auth').get_state()['is_authenticated']
         current_page = self._current_page_name # Get current page to avoid redundant buttons
+        user = self.context.get_current_user()
+        is_admin = user and getattr(user, 'role', None) == UserRole.ADMIN
         
         # Use ttk.Button with Navbar.TButton style
         # Options like text, command are passed directly
@@ -209,6 +225,11 @@ class App(tk.Tk, Observer):
             # Only show Dashboard if not already there
             if current_page != 'dashboard':
                 ttk.Button(self.nav_buttons_frame, text="DASHBOARD", style='Navbar.TButton', command=lambda: self.show_page('dashboard')).pack(side=tk.LEFT, padx=5)
+            
+            # Show Admin button if user is admin and not on admin page
+            if is_admin and current_page != 'admin':
+                ttk.Button(self.nav_buttons_frame, text="ADMIN", style='Navbar.TButton', command=lambda: self.show_page('admin')).pack(side=tk.LEFT, padx=5)
+
             # tk.Button(self.nav_buttons_frame, text="View Buses", bg=PALETTE["primary"], command=lambda: self.show_page('buses'), **common_btn_options).pack(side=tk.LEFT, padx=5)
             ttk.Button(self.nav_buttons_frame, text="LOGOUT", style='Danger.TButton', command=self._logout).pack(side=tk.LEFT, padx=5) # Use Danger style for Logout
         # No Login/Register buttons needed in navbar if already on those pages

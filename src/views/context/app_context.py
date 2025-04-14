@@ -91,33 +91,39 @@ class AppContext:
     
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(AppContext, cls).__new__(cls)
-            cls._instance._stores: Dict[str, Store] = {}
-            cls._instance._auth_store = Store({
+            # Create the instance first
+            instance = super(AppContext, cls).__new__(cls)
+
+            # Initialize attributes directly on the instance
+            instance._stores: Dict[str, Store] = {} # type: ignore
+            instance._services: Dict[str, Any] = {} # type: ignore
+
+            # Initialize default stores and add them to the _stores dictionary
+            instance._auth_store = Store({
                 'current_user': None,
                 'is_authenticated': False,
                 'role': None
             })
-            cls._instance._stores['auth'] = cls._instance._auth_store
+            instance._stores['auth'] = instance._auth_store
             
-            cls._instance._location_store = Store({
+            instance._location_store = Store({
                 'current_location': None,
                 'location_name': None,
                 'latitude': None,
                 'longitude': None
             })
-            cls._instance._stores['location'] = cls._instance._location_store
+            instance._stores['location'] = instance._location_store
             
-            cls._instance._app_store = Store({
+            instance._app_store = Store({
                 'is_loading': False,
                 'error': None,
                 'theme': 'light',
                 'is_ready': False
             })
-            cls._instance._stores['app'] = cls._instance._app_store
-            
-            # Create service connections
-            cls._instance._services = {}
+            instance._stores['app'] = instance._app_store
+
+            # Assign the fully initialized instance to the class variable
+            cls._instance = instance
         return cls._instance
     
     def get_store(self, name: str) -> Optional[Store]:
@@ -175,16 +181,20 @@ class AppContext:
     # Convenience methods for auth
     def set_current_user(self, user: Any) -> None:
         """Set the current authenticated user."""
-        self._auth_store.update({
-            'current_user': user,
-            'is_authenticated': user is not None,
-            'role': getattr(user, 'role', None) if user else None
-        })
+        auth_store = self.get_store('auth')
+        if auth_store:
+            auth_store.update({
+                'current_user': user,
+                'is_authenticated': user is not None,
+                'role': getattr(user, 'role', None) if user else None
+            })
     
     def get_current_user(self) -> Any:
         """Get the current authenticated user."""
-        return self._auth_store.get('current_user')
+        auth_store = self.get_store('auth')
+        return auth_store.get('current_user') if auth_store else None
     
     def is_authenticated(self) -> bool:
         """Check if a user is currently authenticated."""
-        return self._auth_store.get('is_authenticated', False) 
+        auth_store = self.get_store('auth')
+        return auth_store.get('is_authenticated', False) if auth_store else False 
