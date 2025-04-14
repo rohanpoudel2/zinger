@@ -14,6 +14,7 @@ from views.pages.admin_dashboard_page import AdminDashboardPage # Import admin p
 from views.pages.admin_all_bookings_page import AdminAllBookingsPage # Import admin bookings page
 from views.pages.admin_manage_users_page import AdminManageUsersPage # Import admin users page
 from views.pages.admin_export_page import AdminExportPage # Import admin export page
+from views.pages.map_page import MapPage # Import map page
 from views.config.theme import PALETTE, FONTS # Import from theme config
 from models.database_models import UserRole # Import UserRole
 
@@ -82,6 +83,7 @@ class App(tk.Tk, Observer):
             'admin_all_bookings': AdminAllBookingsPage, # Add admin bookings route
             'admin_manage_users': AdminManageUsersPage, # Add admin users route
             'admin_export_bookings': AdminExportPage, # Add admin export route
+            'map': MapPage, # Add map route
             # 'booking': BookingPage,
         }
         
@@ -229,6 +231,10 @@ class App(tk.Tk, Observer):
             # Show Admin button if user is admin and not on admin page
             if is_admin and current_page != 'admin':
                 ttk.Button(self.nav_buttons_frame, text="ADMIN", style='Navbar.TButton', command=lambda: self.show_page('admin')).pack(side=tk.LEFT, padx=5)
+
+            # Show Map button if not on map page
+            if current_page != 'map':
+                ttk.Button(self.nav_buttons_frame, text="MAP", style='Navbar.TButton', command=lambda: self.show_page('map')).pack(side=tk.LEFT, padx=5)
 
             # tk.Button(self.nav_buttons_frame, text="View Buses", bg=PALETTE["primary"], command=lambda: self.show_page('buses'), **common_btn_options).pack(side=tk.LEFT, padx=5)
             ttk.Button(self.nav_buttons_frame, text="LOGOUT", style='Danger.TButton', command=self._logout).pack(side=tk.LEFT, padx=5) # Use Danger style for Logout

@@ -4,6 +4,9 @@ import geocoder
 from geopy.distance import geodesic
 import logging
 
+# Get AppContext to update the store
+from views.context.app_context import AppContext 
+
 # Get loggers
 app_logger = logging.getLogger('app')
 error_logger = logging.getLogger('error')
@@ -20,25 +23,39 @@ class LocationService:
     
     def _update_location(self) -> None:
         """
-        Update the current device location using IP-based geolocation.
+        Set the location to University of New Haven by default.
         """
         try:
-            app_logger.info("Updating current location")
-            g = geocoder.ip('me')
-            if g.ok:
-                self.current_location = (g.lat, g.lng)
-                self.location_name = g.city
-                app_logger.info(f"Location updated successfully: {self.location_name} ({g.lat}, {g.lng})")
-                console.print(f"[green]Location detected:[/green] {self.location_name}")
-            else:
-                error_logger.warning("Could not determine location automatically")
-                console.print("[yellow]Could not determine your location automatically.[/yellow]")
-                self.current_location = None
-                self.location_name = None
+            # University of New Haven coordinates
+            lat = 41.2927
+            lon = -72.9606
+            self.current_location = (lat, lon)
+            self.location_name = "University of New Haven, West Haven, CT"
+            
+            app_logger.info(f"Location set to default: {self.location_name} ({lat}, {lon})")
+            console.print(f"[green]Location:[/green] {self.location_name}")
+            
+            # Update AppContext Store
+            try:
+                context = AppContext()
+                location_store = context.get_store('location')
+                if location_store:
+                    location_store.update({
+                        'latitude': lat,
+                        'longitude': lon,
+                        'location_name': self.location_name,
+                        'current_location': self.current_location
+                    })
+                    app_logger.info("AppContext location store updated.")
+                else:
+                    app_logger.warning("Location store not found in AppContext.")
+            except Exception as ctx_e:
+                error_logger.error(f"Error updating AppContext location store: {ctx_e}")
+                
         except Exception as e:
-            error_msg = f"Error getting location: {str(e)}"
+            error_msg = f"Error setting default location: {str(e)}"
             error_logger.error(error_msg, exc_info=True)
-            console.print(f"[red]Error getting location:[/red] {str(e)}")
+            console.print(f"[red]Error setting default location:[/red] {str(e)}")
             self.current_location = None
             self.location_name = None
 
