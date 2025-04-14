@@ -2,9 +2,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Dict, Any, Optional
 
-from views.components.base_component import Component
+# Removed: from views.components.base_component import Component
 from views.components.input import Input
-from views.components.button import Button
+# Removed: from views.components.button import Button
 from views.components.card import Card
 from views.context.app_context import AppContext
 

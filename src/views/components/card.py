@@ -1,9 +1,9 @@
 import tkinter as tk
 from typing import Dict, Any, List, Optional
-from views.components.base_component import Component
+# Removed: from views.components.base_component import Component
 from views.config.theme import PALETTE, FONTS # Import theme
 
-class Card(Component):
+class Card(tk.Frame): # Inherit from tk.Frame
     """
     A card component with a title and content area.
     
@@ -22,6 +22,7 @@ class Card(Component):
         """Initialize and configure the Card Frame."""
         # Get props with theme defaults
         props = props or {}
+        self.props = props # Store props separately
         title = props.get('title', '')
         padding = props.get('padding', 16) # Material standard padding
         background = props.get('background', PALETTE["card_bg"])
@@ -41,8 +42,8 @@ class Card(Component):
         if height:
             kwargs['height'] = height
             
-        # Call BaseComponent.__init__ (which calls tk.Frame.__init__)
-        super().__init__(parent, props=props, **kwargs)
+        # Call tk.Frame.__init__ directly using super()
+        super().__init__(parent, **kwargs)
         
         # Configure padding AFTER init (pack/grid affects internal padding differently)
         # Use internal Frames for content padding instead of configuring the Card itself

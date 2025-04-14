@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Any, Optional, List, Callable, Type
 
-# from views.components.base_component import Component # Keep if needed
+# Removed: from views.components.base_component import Component # Keep if needed
 from views.context.app_context import AppContext, Observer
 from views.pages.login_page import LoginPage
 from views.pages.dashboard_page import DashboardPage

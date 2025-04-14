@@ -2,9 +2,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Dict, Any, Optional
 
-from views.components.base_component import Component
+# Removed: from views.components.base_component import Component
 from views.components.input import Input
-from views.components.button import Button
+# Removed: from views.components.button import Button
 from views.components.card import Card
 from views.context.app_context import AppContext
 
@@ -180,9 +180,8 @@ class LoginPage(tk.Frame):
 
     def reset_state(self) -> None:
         """Reset the page to its initial state when shown."""
-        # Clear input fields (optional, might be better to leave them)
-        # self.username_input.clear()
-        # self.password_input.clear()
+        self.username_input.clear()
+        self.password_input.clear()
         
         # Clear error message
         if hasattr(self, 'error_label'):

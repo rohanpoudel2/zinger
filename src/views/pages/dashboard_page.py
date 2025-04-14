@@ -2,9 +2,9 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Any, List, Optional
 
-# from views.components.base_component import Component # Not needed anymore
+# Removed: from views.components.base_component import Component # Not needed anymore
 from views.components.card import Card
-# from views.components.button import Button # Use ttk.Button
+# Removed: from views.components.button import Button # Use ttk.Button
 from views.context.app_context import AppContext
 from views.config.theme import PALETTE, FONTS
 from views.pages.base_page import AuthenticatedPage # Import the new base class
