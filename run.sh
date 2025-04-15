@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' 
 
-echo -e "${GREEN}=== Bus Reservation System ===${NC}"
+echo -e "${GREEN}=== Bus Booking System - GUI ===${NC}"
 
 # Create and activate virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
@@ -26,9 +26,9 @@ fi
 echo -e "${YELLOW}Installing requirements...${NC}"
 pip install -r requirements.txt
 
-# Run the application
-echo -e "${GREEN}Starting the application...${NC}"
-python src/main.py
+# Run the GUI application
+echo -e "${GREEN}Starting the GUI application...${NC}"
+python src/gui_main.py
 
 # Deactivate virtual environment
 deactivate 

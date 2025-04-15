@@ -54,10 +54,12 @@ class AuthenticatedPage(tk.Frame):
             tk.Label(self, text="Internal Error", fg="red").pack(pady=20)
             return
         
-        # Get common services and user info needed by most authenticated pages
+        # Get common services from context
         self.auth_service = self.context.get_service('auth_service')
         self.booking_service = self.context.get_service('booking_service')
-        self.current_user = self.context.get_current_user()
+        
+        # Get current user - moved to separate method for reuse
+        self._refresh_user_data()
         
         # Validate essential data (optional but good practice)
         if not self.current_user:
@@ -69,6 +71,10 @@ class AuthenticatedPage(tk.Frame):
         
         # Call the method that subclasses must implement to build their UI
         self._create_page_widgets()
+        
+    def _refresh_user_data(self):
+        """Get fresh user data from context"""
+        self.current_user = self.context.get_current_user()
 
     def _create_page_widgets(self):
         """Subclasses MUST override this method to create their widgets."""
@@ -77,7 +83,8 @@ class AuthenticatedPage(tk.Frame):
 
     def reset_state(self) -> None:
         """
-        Optional: Placeholder for resetting page state when shown.
-        Subclasses can override this if they need specific reset logic.
+        Reset page state when shown. Refreshes user data by default.
+        Subclasses should call super().reset_state() when overriding.
         """
-        pass # Default implementation does nothing 
+        # Always refresh user data when page is shown
+        self._refresh_user_data() 

@@ -86,4 +86,32 @@ class BusRepository(BaseRepository[BusModel]):
             return True
         except Exception as e:
             logging.error(f"Error bulk updating buses: {e}")
-            return False 
+            return False
+
+    def search_buses(self, search_term: str) -> List[BusModel]:
+        """Search for buses by bus number or route.
+        
+        Args:
+            search_term: Text to search for in bus_number or route fields
+            
+        Returns:
+            List of buses matching the search criteria
+        """
+        try:
+            if not search_term or search_term.strip() == "":
+                return self.get_active_buses()
+                
+            # Convert search term to lowercase for case-insensitive search
+            # and add wildcards for partial matching
+            search_pattern = f"%{search_term.lower()}%"
+            
+            return self.session.query(BusModel).filter(
+                (BusModel.is_active == True) &
+                (
+                    BusModel.bus_number.ilike(search_pattern) | 
+                    BusModel.route.ilike(search_pattern)
+                )
+            ).all()
+        except Exception as e:
+            logging.error(f"Error searching buses: {e}")
+            return [] 

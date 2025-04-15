@@ -18,7 +18,6 @@ class BusListPage(AuthenticatedPage):
     def __init__(self, parent: tk.Widget, props: Dict[str, Any] = None, **kwargs):
         # Local state for data
         self._buses: List[Any] = [] # Store BusModel or similar objects
-        self._filtered_buses: List[Any] = [] # Store filtered buses for search
         self._is_loading: bool = True
         self._error: Optional[str] = None
         self._search_term: tk.StringVar = tk.StringVar()
@@ -118,17 +117,11 @@ class BusListPage(AuthenticatedPage):
         self._load_buses()
 
     def _load_buses(self) -> None:
-        '''Fetch available bus data.'''
+        '''Fetch available bus data from database.'''
         self._is_loading = True
         self._error = None
-        self._buses = [] # Clear previous buses before loading
-        self._filtered_buses = [] # Clear filtered buses as well
-        self._search_term.set("") # Clear search term
-        self._render_ui_states() # Show loading state
-
-        # --- Service Interaction ---
-        # The CLI used booking_service.get_buses_near_location.
-        # Let's assume a method `get_available_buses` exists for the GUI context.
+        self._buses = []  # Clear previous buses before loading
+        self._render_ui_states()  # Show loading state
 
         if not self.booking_service:
             self._is_loading = False
@@ -137,19 +130,15 @@ class BusListPage(AuthenticatedPage):
             return
 
         try:
-            # TODO: Confirm/replace 'get_available_buses()' with the correct method
-            # from BookingService. Check if it needs coordinates or other params.
-            # Example: buses = self.booking_service.get_buses_near_location(radius_km=5)
+            # Get all available buses
             buses = self.booking_service.get_available_buses()
 
             self._buses = buses or []
-            self._filtered_buses = self._buses.copy() # Initialize filtered buses with all buses
             self._is_loading = False
             if not self._buses:
-                self._error = "No buses found nearby." # Use info message
+                self._error = "No buses found nearby."  # Use info message
 
         except Exception as e:
-            # TODO: Replace with proper logging
             print(f"ERROR: src.views.pages.bus_list_page._load_buses: {e}")
             self._is_loading = False
             self._error = f"Failed to load bus data: {str(e)}"
@@ -157,31 +146,41 @@ class BusListPage(AuthenticatedPage):
         self._render_ui_states()
 
     def _search_buses(self) -> None:
-        '''Filter buses based on search term.'''
-        search_term = self._search_term.get().strip().lower()
+        '''Search buses from the database based on search term.'''
+        self._is_loading = True
+        self._render_ui_states() # Show loading state
         
-        if not search_term:
-            # If search term is empty, show all buses
-            self._filtered_buses = self._buses.copy()
-        else:
-            # Filter buses based on bus number and route
-            self._filtered_buses = []
-            for bus in self._buses:
-                bus_number = str(getattr(bus, 'bus_number', '')).lower()
-                route = str(getattr(bus, 'route', '')).lower()
-                
-                if search_term in bus_number or search_term in route:
-                    self._filtered_buses.append(bus)
+        search_term = self._search_term.get().strip()
         
-        # Update the UI to show filtered results
+        if not self.booking_service:
+            self._is_loading = False
+            self._error = "Booking service not available."
+            self._render_ui_states()
+            return
+            
+        try:
+            # Use the database search method instead of in-memory filtering
+            self._buses = self.booking_service.search_buses(search_term)
+            
+            self._is_loading = False
+            if not self._buses:
+                if search_term:
+                    self._error = f"No buses found matching '{search_term}'."
+                else:
+                    self._error = "No buses found nearby."
+                    
+        except Exception as e:
+            print(f"ERROR: src.views.pages.bus_list_page._search_buses: {e}")
+            self._is_loading = False
+            self._error = f"Failed to search buses: {str(e)}"
+            
         self._render_ui_states()
     
     def _clear_search(self) -> None:
-        '''Clear search term and show all buses.'''
+        '''Clear search term and load all buses from database.'''
         self._search_term.set("")
-        self._filtered_buses = self._buses.copy()
-        self._render_ui_states()
-
+        self._load_buses()  # Load all buses again from the database
+        
     def _render_ui_states(self) -> None:
         '''Render the UI based on loading/error state and bus data.'''
         # Clear previous content (Treeview/scrollbar or status label)
@@ -199,10 +198,6 @@ class BusListPage(AuthenticatedPage):
         elif not self._buses: # No data, possibly with an info message like "No buses found"
             no_buses_message = self._error if self._error else "No buses found nearby."
             self.status_label.config(text=no_buses_message, fg=PALETTE["text_secondary"])
-        elif not self._filtered_buses: # Have buses but none match the search term
-            self.status_label.config(text=f"No buses match your search: '{self._search_term.get()}'", 
-                                    fg=PALETTE["warning"], wraplength=400)
-            self.status_label.grid() # Make sure it's visible
         else:
             # Data loaded successfully, hide status label and show treeview
             self.status_label.grid_remove()
@@ -221,9 +216,9 @@ class BusListPage(AuthenticatedPage):
         # Add count to the route heading
         search_term = self._search_term.get().strip()
         if search_term:
-            route_heading = f"Route (Found {len(self._filtered_buses)} matching '{search_term}')"
+            route_heading = f"Route (Found {len(self._buses)} matching '{search_term}')"
         else:
-            route_heading = f"Route (Showing {len(self._filtered_buses)})"
+            route_heading = f"Route (Showing {len(self._buses)})"
         tree.heading('route', text=route_heading)
         
         tree.heading('distance', text='Distance')
@@ -238,7 +233,7 @@ class BusListPage(AuthenticatedPage):
         tree.column('status', width=100, anchor=tk.CENTER, stretch=tk.NO)
 
         # --- Populate Treeview ---
-        for bus in self._filtered_buses:
+        for bus in self._buses:
             # Get attributes safely
             bus_number = getattr(bus, 'bus_number', 'N/A')
             route_display = getattr(bus, 'route', 'Unknown Route')

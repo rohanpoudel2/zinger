@@ -311,4 +311,24 @@ class BookingService:
         except Exception as e:
             error_msg = f"Error exporting user bookings to CSV: {str(e)}"
             error_logger.error(error_msg, exc_info=True)
-            return False 
+            return False
+
+    def search_buses(self, search_term: str) -> List:
+        """Search for buses by bus number or route.
+        
+        Args:
+            search_term: Text to search for in bus_number or route fields
+            
+        Returns:
+            List of buses matching the search criteria
+        """
+        app_logger.info(f"Searching for buses with term: '{search_term}'")
+        try:
+            buses = self.bus_repo.search_buses(search_term)
+            app_logger.info(f"Found {len(buses)} buses matching search term '{search_term}'")
+            return buses
+        except Exception as e:
+            error_msg = f"Error searching for buses: {str(e)}"
+            error_logger.error(error_msg, exc_info=True)
+            console.print(f"\n[red]Error searching for buses:[/red] {e}")
+            return [] 

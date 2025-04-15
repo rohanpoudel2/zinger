@@ -240,6 +240,9 @@ class NewBookingPage(AuthenticatedPage):
             )
 
             if booking:
+                # Reset button state before showing message or navigating
+                self.confirm_button.config(state=tk.NORMAL, text="CONFIRM BOOKING")
+                
                 # Revert to using messagebox
                 messagebox.showinfo("Booking Successful",
                                     f"Booking confirmed!\n\n"
@@ -247,10 +250,12 @@ class NewBookingPage(AuthenticatedPage):
                                     f"Bus Number: {bus_number}\n"
                                     f"Passenger: {passenger_name}")
 
+                # Reset form before navigating
+                self.reset_state()
+                
                 # Navigate back to dashboard immediately
                 if self.app:
                     self.app.show_page('dashboard')
-                    # self.app.after(100, lambda: self.app.show_page('dashboard')) # Removed delayed navigation
             else:
                 # This case might not be reachable if book_seat raises exceptions on failure
                 self._show_error("Booking failed. Please try again.")
@@ -277,10 +282,12 @@ class NewBookingPage(AuthenticatedPage):
         if hasattr(self, 'phone_number_input'): self.phone_number_input.clear()
         if hasattr(self, 'error_label'): self._show_error('')
         
+        # Reset confirm button to original state
+        if hasattr(self, 'confirm_button'):
+            self.confirm_button.config(state=tk.DISABLED, text="CONFIRM BOOKING")
+        
         # Reload bus list and reset combobox
         self._load_available_buses() 
-
-        # Reset button state (will be handled by _load_available_buses/_update_button_state)
-        # if hasattr(self, 'confirm_button'):
-        #      self.confirm_button.config(state=tk.DISABLED, text="CONFIRM BOOKING")
-        # self._update_button_state() # Called within _load_available_buses 
+        
+        # Update button state after everything is reset
+        self._update_button_state() 

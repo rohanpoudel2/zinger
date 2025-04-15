@@ -271,6 +271,10 @@ class DashboardPage(AuthenticatedPage): # Inherit from AuthenticatedPage
     # Page Lifecycle Method
     def reset_state(self) -> None:
         """Reload data when the page is shown."""
+        # Call the parent class's reset_state to refresh user data
+        super().reset_state()
+        
+        # Now load data with the freshly updated user information
         self._load_data()
 
     # Removed: init, render, component_did_mount, set_state, get_state
