@@ -18,8 +18,10 @@ class BusListPage(AuthenticatedPage):
     def __init__(self, parent: tk.Widget, props: Dict[str, Any] = None, **kwargs):
         # Local state for data
         self._buses: List[Any] = [] # Store BusModel or similar objects
+        self._filtered_buses: List[Any] = [] # Store filtered buses for search
         self._is_loading: bool = True
         self._error: Optional[str] = None
+        self._search_term: tk.StringVar = tk.StringVar()
 
         # Booking service is available via AuthenticatedPage as self.booking_service
         # self.location_service = self.context.get_service('location_service') # Fetch if needed
@@ -52,6 +54,47 @@ class BusListPage(AuthenticatedPage):
         )
         refresh_button.pack(side=tk.RIGHT, padx=5)
 
+        # Search bar
+        search_frame = tk.Frame(self, bg=PALETTE["secondary"], padx=20, pady=10)
+        search_frame.pack(fill=tk.X)
+        
+        search_label = tk.Label(
+            search_frame,
+            text="Search:",
+            font=FONTS["body"],
+            fg=PALETTE["text_secondary"],
+            bg=PALETTE["secondary"],
+            anchor='w'
+        )
+        search_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        search_entry = ttk.Entry(
+            search_frame,
+            textvariable=self._search_term,
+            font=FONTS["input"],
+            width=30
+        )
+        search_entry.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Make Enter key trigger search
+        search_entry.bind("<Return>", lambda e: self._search_buses())
+        
+        search_button = ttk.Button(
+            search_frame,
+            text="Search",
+            style="Secondary.TButton",
+            command=self._search_buses
+        )
+        search_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        clear_button = ttk.Button(
+            search_frame,
+            text="Clear",
+            style="Outline.TButton",
+            command=self._clear_search
+        )
+        clear_button.pack(side=tk.LEFT)
+
         # Content area for the list/table
         self.content_frame = tk.Frame(self, bg=PALETTE["secondary"], padx=20, pady=10)
         self.content_frame.pack(fill=tk.BOTH, expand=True)
@@ -79,6 +122,8 @@ class BusListPage(AuthenticatedPage):
         self._is_loading = True
         self._error = None
         self._buses = [] # Clear previous buses before loading
+        self._filtered_buses = [] # Clear filtered buses as well
+        self._search_term.set("") # Clear search term
         self._render_ui_states() # Show loading state
 
         # --- Service Interaction ---
@@ -98,6 +143,7 @@ class BusListPage(AuthenticatedPage):
             buses = self.booking_service.get_available_buses()
 
             self._buses = buses or []
+            self._filtered_buses = self._buses.copy() # Initialize filtered buses with all buses
             self._is_loading = False
             if not self._buses:
                 self._error = "No buses found nearby." # Use info message
@@ -108,6 +154,32 @@ class BusListPage(AuthenticatedPage):
             self._is_loading = False
             self._error = f"Failed to load bus data: {str(e)}"
 
+        self._render_ui_states()
+
+    def _search_buses(self) -> None:
+        '''Filter buses based on search term.'''
+        search_term = self._search_term.get().strip().lower()
+        
+        if not search_term:
+            # If search term is empty, show all buses
+            self._filtered_buses = self._buses.copy()
+        else:
+            # Filter buses based on bus number and route
+            self._filtered_buses = []
+            for bus in self._buses:
+                bus_number = str(getattr(bus, 'bus_number', '')).lower()
+                route = str(getattr(bus, 'route', '')).lower()
+                
+                if search_term in bus_number or search_term in route:
+                    self._filtered_buses.append(bus)
+        
+        # Update the UI to show filtered results
+        self._render_ui_states()
+    
+    def _clear_search(self) -> None:
+        '''Clear search term and show all buses.'''
+        self._search_term.set("")
+        self._filtered_buses = self._buses.copy()
         self._render_ui_states()
 
     def _render_ui_states(self) -> None:
@@ -127,6 +199,10 @@ class BusListPage(AuthenticatedPage):
         elif not self._buses: # No data, possibly with an info message like "No buses found"
             no_buses_message = self._error if self._error else "No buses found nearby."
             self.status_label.config(text=no_buses_message, fg=PALETTE["text_secondary"])
+        elif not self._filtered_buses: # Have buses but none match the search term
+            self.status_label.config(text=f"No buses match your search: '{self._search_term.get()}'", 
+                                    fg=PALETTE["warning"], wraplength=400)
+            self.status_label.grid() # Make sure it's visible
         else:
             # Data loaded successfully, hide status label and show treeview
             self.status_label.grid_remove()
@@ -134,26 +210,35 @@ class BusListPage(AuthenticatedPage):
 
     def _create_bus_treeview(self) -> None:
         '''Create and populate the bus list Treeview.'''
+        # Create the Treeview
         columns = ('number', 'route', 'distance', 'updated', 'status')
         # Apply the "Treeview" style configured in app.py
         tree = ttk.Treeview(self.tree_container, columns=columns, show='headings', style="Treeview")
 
         # Define headings
         tree.heading('number', text='Bus #')
-        tree.heading('route', text='Route')
+        
+        # Add count to the route heading
+        search_term = self._search_term.get().strip()
+        if search_term:
+            route_heading = f"Route (Found {len(self._filtered_buses)} matching '{search_term}')"
+        else:
+            route_heading = f"Route (Showing {len(self._filtered_buses)})"
+        tree.heading('route', text=route_heading)
+        
         tree.heading('distance', text='Distance')
         tree.heading('updated', text='Last Update')
         tree.heading('status', text='Status')
 
         # Define column properties
         tree.column('number', width=80, anchor=tk.CENTER, stretch=tk.NO)
-        tree.column('route', width=250, stretch=tk.YES) # Allow route to stretch
+        tree.column('route', width=350, stretch=tk.YES) # Make route column wider for the count
         tree.column('distance', width=100, anchor=tk.E, stretch=tk.NO)
         tree.column('updated', width=120, anchor=tk.CENTER, stretch=tk.NO)
         tree.column('status', width=100, anchor=tk.CENTER, stretch=tk.NO)
 
         # --- Populate Treeview ---
-        for bus in self._buses:
+        for bus in self._filtered_buses:
             # Get attributes safely
             bus_number = getattr(bus, 'bus_number', 'N/A')
             route_display = getattr(bus, 'route', 'Unknown Route')
@@ -161,35 +246,25 @@ class BusListPage(AuthenticatedPage):
             last_updated_dt = getattr(bus, 'last_updated', None)
             status = getattr(bus, 'status', 'Unknown').capitalize()
 
-            # --- Filtering Logic (similar to CLI menu.py:258-277) ---
-            # Skip if the route doesn't have a proper format or is empty
-            if not route_display or ' - ' not in route_display or not route_display.strip():
-                continue 
-                
-            # Split the route into number and name
-            parts = route_display.split(' - ', 1)
-            if len(parts) != 2:
-                continue 
-            route_number_part, route_name_part = parts
+            # Basic display formatting - no filtering (show all buses)
+            cleaned_route_display = route_display
             
-            # Clean up route number part
-            route_number_part = route_number_part.replace('Route ', '')
-
-            # Skip if route name is just a duplicate of the route number or empty
-            if not route_name_part.strip() or route_name_part == route_number_part or route_name_part == f"Route {route_number_part}":
-                continue
-            # --- End Filtering Logic ---
+            # If route has a format with " - ", clean it up a bit, but don't filter out
+            if route_display and ' - ' in route_display:
+                parts = route_display.split(' - ', 1)
+                if len(parts) == 2:
+                    route_number_part, route_name_part = parts
+                    # Clean up route number part
+                    route_number_part = route_number_part.replace('Route ', '')
+                    cleaned_route_display = f"{route_number_part} - {route_name_part}"
 
             # Format display values
             distance_display = f"{distance_km:.2f} km" if distance_km is not None else "N/A"
             last_update = last_updated_dt.strftime("%H:%M:%S") if isinstance(last_updated_dt, datetime) else "N/A"
 
-            # Use cleaned/formatted route for display
-            cleaned_route_display = f"{route_number_part} - {route_name_part}"
-
             tree.insert('', tk.END, values=(
                 bus_number,
-                cleaned_route_display, # Use cleaned route
+                cleaned_route_display,
                 distance_display,
                 last_update,
                 status
@@ -203,7 +278,8 @@ class BusListPage(AuthenticatedPage):
         tree.grid(row=0, column=0, sticky='nsew')
         scrollbar.grid(row=0, column=1, sticky='ns')
 
-        # Styling is applied via style="Treeview" which uses styles from App
+        # Make sure the tree expands properly
+        self.tree_container.rowconfigure(0, weight=1)
 
     def reset_state(self) -> None:
         '''Reset state when page is shown (e.g., reload data).'''

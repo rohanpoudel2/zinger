@@ -181,8 +181,7 @@ class MapPage(AuthenticatedPage):
                         'route': route,
                         'route_id': route_id
                     }
-                    # Add click event to show route
-                    marker.command = lambda m=marker: self._show_bus_route(m)
+                    # Removed click event for bus labels
                     self._bus_markers[bus_num] = marker # Store marker by bus number
                 else:
                     print(f"Bus {bus_num} has no location data.")
@@ -340,8 +339,7 @@ class MapPage(AuthenticatedPage):
                             'route': route,
                             'route_id': route_id
                         }
-                        # Add click event to show route
-                        marker.command = lambda m=marker: self._show_bus_route(m)
+                        # No click functionality for bus labels
                         self._bus_markers[bus_num] = marker
 
             # Remove markers for buses that are no longer reported
