@@ -11,6 +11,7 @@ from utils.logger import get_app_logger, get_error_logger, get_access_logger
 from menu import Menu
 from rich.console import Console
 from rich.traceback import install
+from exceptions import DatabaseError, BusError, TrackingError
 import os
 import threading
 import time
@@ -33,6 +34,14 @@ def update_bus_data(db_manager: DatabaseManager):
                 transit_service = TransitService(thread_session)
                 transit_service.update_bus_database()
                 time.sleep(30)
+            except DatabaseError as e:
+                error_msg = f"Database error updating bus data: {str(e)}"
+                error_logger.error(error_msg, exc_info=True)
+                console.print(f"\n[red]Database error updating bus data:[/red] {str(e)}")
+            except (BusError, TrackingError) as e:
+                error_msg = f"Bus tracking error: {str(e)}"
+                error_logger.error(error_msg, exc_info=True)
+                console.print(f"\n[red]Bus tracking error:[/red] {str(e)}")
             except Exception as e:
                 error_msg = f"Error updating bus data: {str(e)}"
                 error_logger.error(error_msg, exc_info=True)
@@ -45,13 +54,16 @@ def main():
     # Setup interrupt handler
     setup_interrupt_handler(console)
     
+    # Application startup logging
     app_logger.info("Application starting...")
+    console.print("[green]Application starting...[/green]")
     access_logger.info("Application initialization begun")
 
     try:
         # Initialize services and repositories
         db_manager = DatabaseManager()
         app_logger.info("Database manager initialized")
+        console.print("[green]Database initialized successfully[/green]")
         
         # Initialize database (creates tables if needed)
         db_manager.initialize_database()
@@ -60,11 +72,13 @@ def main():
         # Initialize location service first
         location_service = LocationService()
         app_logger.info("Location service initialized")
+        console.print("[green]Location service initialized[/green]")
         
         # Create a session for TransitService (will be used in background thread)
         transit_session = db_manager.Session()
         transit_service = TransitService(transit_session)
         app_logger.info("Transit service initialized")
+        console.print("[green]Transit service initialized[/green]")
         
         # Start the background update thread
         update_thread = threading.Thread(
@@ -74,6 +88,7 @@ def main():
         )
         update_thread.start()
         app_logger.info("Background update thread started")
+        console.print("[green]Background update thread started[/green]")
         
         # Use a context manager for the main session
         with db_manager.get_session() as session:
@@ -89,6 +104,7 @@ def main():
             auth_service = AuthService(user_repository)
             
             app_logger.info("All services and repositories initialized")
+            console.print("[green]All services initialized successfully[/green]")
             
             # Initialize and start the menu
             menu = Menu(
@@ -98,18 +114,24 @@ def main():
                 db_session=session
             )
             app_logger.info("Menu initialized, starting application interface")
+            console.print("[green]Starting application interface...[/green]")
             menu.start()
             
+    except DatabaseError as e:
+        error_msg = f"Database error: {str(e)}"
+        error_logger.error(error_msg, exc_info=True)
+        console.print(f"\n[red]Database error:[/red] {e}")
     except Exception as e:
         error_msg = f"Critical application error: {str(e)}"
         error_logger.critical(error_msg, exc_info=True)
-        print(f"Application error: {str(e)}")
+        console.print(f"\n[red]Application error:[/red] {str(e)}")
     finally:
         if 'transit_session' in locals():
             transit_session.close()
         if 'db_manager' in locals():
             db_manager.close()
         app_logger.info("Application shutdown complete")
+        console.print("[yellow]Application shutdown complete[/yellow]")
 
 if __name__ == "__main__":
     main()

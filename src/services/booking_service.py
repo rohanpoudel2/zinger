@@ -3,13 +3,17 @@ from models.database_models import BookingModel
 from repositories.booking_repository import BookingRepository
 from repositories.bus_repository import BusRepository
 from repositories.user_repository import UserRepository
-from exceptions import BookingError, ValidationError, BusError, UserError
+from exceptions import BookingError, ValidationError, BusError, UserError, DatabaseError
 import logging
+from rich.console import Console
 
 # Get loggers
 app_logger = logging.getLogger('app')
 error_logger = logging.getLogger('error')
 access_logger = logging.getLogger('access')
+
+# Initialize Rich console
+console = Console()
 
 class BookingService:
     def __init__(self, booking_repo: BookingRepository, bus_repo: BusRepository, user_repo: UserRepository):
@@ -37,6 +41,7 @@ class BookingService:
             app_logger.info(f"Creating booking for user {user_id} on bus {bus_id} for {seats} seats")
             
             # Verify user exists
+            # This is a critical check to ensure we don't create bookings for non-existent users
             user = self.user_repo.get_by_id(user_id)
             if not user:
                 error_msg = f"User {user_id} not found"
@@ -44,6 +49,7 @@ class BookingService:
                 raise UserError(error_msg)
 
             # Verify bus exists and is active
+            # We check both existence and active status to prevent bookings on inactive buses
             bus = self.bus_repo.get_by_id(bus_id)
             if not bus:
                 error_msg = f"Bus {bus_id} not found"
@@ -55,6 +61,7 @@ class BookingService:
                 raise BusError(error_msg)
 
             # Create booking
+            # After all validation passes, we can safely create the booking record
             booking = self.booking_repo.create_booking(
                 user_id=user_id,
                 bus_id=bus_id,
@@ -62,16 +69,21 @@ class BookingService:
                 departure_time=bus.last_updated
             )
             
+            # Log successful creation for both application monitoring and access tracking
             app_logger.info(f"Successfully created booking {booking.id} for user {user_id}")
             access_logger.info(f"New booking created - ID: {booking.id}, User: {user_id}, Bus: {bus_id}")
             return booking
 
         except (UserError, BusError, BookingError) as e:
+            # Handle domain-specific errors with proper logging
             error_logger.error(f"Booking creation failed: {str(e)}")
+            console.print(f"\n[red]Error creating booking:[/red] {e}")
             raise e
         except Exception as e:
+            # Catch any unexpected errors and convert to domain-specific BookingError
             error_msg = f"Failed to create booking: {str(e)}"
             error_logger.error(error_msg, exc_info=True)
+            console.print(f"\n[red]Unexpected error creating booking:[/red] {e}")
             raise BookingError(error_msg)
 
     def get_booking(self, booking_id: int) -> Optional[BookingModel]:
@@ -183,9 +195,26 @@ class BookingService:
             access_logger.info(f"New seat booking - Bus: {bus_number}, Passenger: {passenger_name}, User ID: {user_id}")
             return booking
             
+        except ValidationError as e:
+            error_logger.error(f"Validation error in book_seat: {e}", exc_info=True)
+            console.print(f"\n[red]Validation error:[/red] {e}")
+            raise
+        except BusError as e:
+            error_logger.error(f"Bus error in book_seat: {e}", exc_info=True)
+            console.print(f"\n[red]Bus error:[/red] {e}")
+            raise
+        except DatabaseError as e:
+            error_logger.error(f"Database error in book_seat: {e}", exc_info=True)
+            console.print(f"\n[red]Database error:[/red] {e}")
+            raise
+        except BookingError as e:
+            error_logger.error(f"Booking error in book_seat: {e}", exc_info=True)
+            console.print(f"\n[red]Booking error:[/red] {e}")
+            raise
         except Exception as e:
             error_msg = f"Failed to book seat: {str(e)}"
             error_logger.error(error_msg, exc_info=True)
+            console.print(f"\n[red]Unexpected error in book_seat:[/red] {e}")
             raise ValidationError(error_msg)
 
     def export_bookings_to_csv(self, filepath: str) -> bool:
